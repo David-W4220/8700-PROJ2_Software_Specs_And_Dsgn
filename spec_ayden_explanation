@@ -1,0 +1,8 @@
+My version of the spec narrows the project’s scope and resolves the vague details in the original description, since we had to change projects quickly when the original scope proved too large. 
+I used Claude to analyze the original spec: listing the questions an implementer would have to guess at, edge-case requests it didn’t cover, and gaps between its goals, 
+requirements and acceptance criteria. I then used Claude to draft a revised spec based on that analysis. The revision limits scope to one station and states what is out of scope. 
+It condenses the goals to five, adding one for authorization and traceability. It expands the domain model with the missing objects, fixed value lists, 
+and a mission lifecycle with explicit transition rules. The actors keep the three roles (Station Inventory Crew, Logistics Planner, Ground Mission Control), each with explicit permissions,
+plus a general User actor for what all roles share and two system actors, the Station App and the Earth Service. The functional requirements are rewritten as user stories grouped by subsystem, 
+with new requirements for situations the original didn’t address, such as stock corrections, item data management, linking alerts to resupply planning, and server-side validation. 
+Every requirement has a matching acceptance criterion, including scenarios for paths the original never tested.
