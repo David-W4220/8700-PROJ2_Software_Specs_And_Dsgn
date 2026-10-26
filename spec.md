@@ -1,10 +1,9 @@
 Project 2: SDD Specification - David Wang
 
-
 # Description
-Our Commercial Space Station Inventory and Resupply System plans resupplies, manages cargo manifests, and tracks deliveries for commercial a space station. Station Inventory Crew can search for items and view their quantities, conditions and locations, as well as manage inventory records. Logistics Planners can identify items needing resupply and develop feasible mission plans. Ground Mission Control can review inventory changes, cargo loading, and delivery progresses. 
+Our Commercial Space Station Inventory and Resupply System plans resupply missions, manages cargo manifests, and tracks deliveries to a commercial space station. Station Inventory Crew can search for items and view their quantities, conditions and locations, as well as manage inventory records. Logistics Planners can identify items needing resupply and develop feasible mission plans. Ground Mission Control can review inventory changes, cargo loading, and delivery progresses. 
 
-The system do preserves and re-syncs inventory changes during communication with Earth. Payroll, taxes, general accounting, life support equipment and spacecraft control are outside the scope of this system.
+The system preserves inventory changes at communication outages with Earth and re-synchronizes upon restoration. Payroll, taxes, general accounting, life support equipment and spacecraft control are outside the scope of this system.
 
 # Goals
 
@@ -13,7 +12,8 @@ The system do preserves and re-syncs inventory changes during communication with
 3. **G3 Plan resupply missions:** Select items that fit mission cargo weight and volume limits and maintain accurate cargo manifests.
 4. **G4 Monitor Station Inventory:** Allow Ground Mission Control to confirm inventory records and its recent changes, as well as synchronization status.
 5. **G5 Support Resupply Operations:** Allow Ground Mission Control to review manifests, acknowledge loading problems and track delivery progress.
-6. **Supporting system goal SysG4 Maintain Inventory Availability During Communication Loss:** The system must save inventory changes in station locally when losing communication with Earth, and synchronize them when communication is restored
+
+**Supporting system goal SysG4 Maintain Inventory Availability During Communication Loss:** The system must save inventory changes in station locally when losing communication with Earth, and synchronize them when communication is restored
 
 # Domain Model
 
@@ -21,8 +21,7 @@ The system do preserves and re-syncs inventory changes during communication with
 
 - **Station Inventory Crew:** Searches inventory; records item usage, movement, condition, and missing items; and records received cargo.
 - **Logistics Planner:** Reviews inventory and resupply needs, selects items for missions, checks cargo capacity, and prepares or updates cargo manifests.
-- **Ground Mission Control:** Monitors inventory status and supply cargo loading, and tracks delivery progress.
-- **Inventory and Resupply System:** The software system that stores and displays inventory data, capable of synchronizing updates, to support resupply missions between Earth and the space station.
+- **Ground Mission Control:** Monitors inventory status, supply cargo loading, mission approval and tracks delivery progress.
 
 ## Objects
 
@@ -33,8 +32,8 @@ The system do preserves and re-syncs inventory changes during communication with
 - **ResupplyMission:** Represents a resupply shipment and stores its status, weight and volume limits, and expected arrival. Mission statuses are Draft, Submitted, Approved, Shipped, Received, or Cancelled.
 - **CargoManifest:** Records the cargo planned for a mission, its version, and its status. Editing a submitted or approved manifest before dispatch returns the mission to Draft and requires resubmission and approval.
 - **ManifestLine:** Connects a cargo manifest to an inventory item and records planned, loaded, and received quantities.
-- **User** Identify a user with a role (Station Inventory Crew, Logistics Planner, or Ground Mission Control) and the actions that a user can perform depending on his role.
-
+- **User:** Identifies an authenticated user with an assigned role (Station Inventory Crew, Logistics Planner, or Ground Mission Control). The assigned role determines the restricted actions allowed for users.
+  
 ## Domain Rules
 
 - Item IDs and update IDs must be unique.
@@ -47,15 +46,15 @@ The system do preserves and re-syncs inventory changes during communication with
 # Functional Requirements
 
 ### FR1 Find An Item
-As a Station Inventory Crew member, I want to find an item and view its current quantity, location, and condition n within three interactions from the main screen, so that I can easily check the station's inventory.
+As a Station Inventory Crew member, I want to find an item and view its current quantity, location, and condition within three interactions from the main screen, so that I can easily check the station's inventory.
 **Goal:** G1
 
 ### FR2 Update Item Quantity
-As a Station Inventory Crew member, I want to update an item's quantity, so that the inventory is in pace with the available stock. The system shall display the item's unit, reject negative quantities and usage above the available usable quantity, and record the user and time of the operation.
+As a Station Inventory Crew member, I want to update an item's quantity, so that the inventory accurately refllects the available stock. The system shall display the item's unit, reject negative quantities and usage above the available usable quantity, and record the user and time of the operation.
 **Goal:** G1
 
 ### FR3  Consistent Inventory Changes
-The system shall apply the same inventory validation rules to all crew members, display a saved value immediately after a valid update, and make the recent changes available for the next crew shift.
+As a Station Inventory Crew member, I want inventory updates to be validated consistently and visible to the next crew shift, so that different shifts work with consistent inventory records. The system shall apply the same inventory validation rules to all crew members, display a saved value immediately after a valid update, and make the recent changes available for the next crew shift.
 **Goals:** G1, G4
 
 ### FR4 Identify Resupply Needs
@@ -63,7 +62,7 @@ As a Logistics Planner, I want to confirm current inventory and identify items r
 **Goal:** G2
 
 ### FR5 Check Cargo Capacity
-As a Logistics Planner, I want to select items for a resupply mission and check their weight and volume against available cargo capacity, so that I can prepare for a feasible mission. The system shall calculate the total weight and volume from item quantities and units, and block submission if either capacity is exceeded or a required measurement is missing.
+As a Logistics Planner, I want to select items for a resupply mission and check their weight and volume against available cargo capacity, so that I can prepare for a feasible mission. The system shall calculate the total weight and volume from item quantities, unit weight and unit volume, and block submission if either capacity is exceeded or a required measurement is missing.
 **Goal:** G3
 
 ### FR6 Create and Update Cargo Manifests
@@ -75,7 +74,7 @@ As a Ground Mission Control user, I want to view current station inventory and r
 **Goals:** G1, G4
 
 ### FR8 Verify Cargo Loading
-As a Ground Mission Control user, I want to compare planned cargo with loaded cargo, so that I can identify missing items or loading problems before shipment. The system shall display planned and loaded quantities and allow recodrings for reported differences.
+As a Ground Mission Control user, I want to compare planned cargo with loaded cargo, so that I can identify missing items or loading problems before shipment. The system shall display planned and loaded quantities and allow records for reported differences.
 **Goal:** G5
 
 ### FR9 Track and Receive Shipments
@@ -83,15 +82,15 @@ As a Ground Mission Control user, I want to view a resupply delivery's status, e
 **Goals:** G3, G5
 
 ### FR10 Save Inventory Changes Offline
-The system shall save inventory changes locally when communication with Earth is unavailable and preserve those changes after the application restarts, and display a count of pending updates and the last successful synchronization time.
+As a Station Inventory Crew member, I want my inventory changes to be saved locally, so that my work is not lost during a communication outage with Earth. The system shall preserve those changes after the application restarts and display a count of pending updates and the last successful synchronization time.
 **Goal:** SysG4 
 
 ### FR11 Synchronize Inventory Changes
-When communication with Earth returns, the system shall send pending updates using unique update IDs. Retrying an update that Earth has already accepted shall not apply it twice. If the station and Earth contain conflicting changes, the system shall retain both versions for review instead of silent overwrites.
+As a Station Inventory Crew member, I want pending inventory changes to synchronize as soon as communication with Earth is restored, so that station and Earth inventory records can be updated without lost or duplicated changes. The system shall send pending updates using unique update IDs and shall not apply an update more than once if Earth has already accepted it. If the station and Earth contain conflicting changes, the system shall retain both versions for review instead of silently overwriting either version.
 **Goal:** SysG4 
 
 ### FR12 Enforce Permissions and Record Changes
-The system shall restrict inventory changes, manifest approval, dispatch confirmation, cargo receipt, and conflict resolution to authorized users. It shall record the user, time, and details of changes. 
+As a system user, I want access to be controlled according to my assigned role, so that actions are restricted to only authorized users and changes can be traced. The system shall allow only authorized users to change inventory, approve missions, confirm dispatch, record cargo receipt, and resolve synchronization conflicts. It shall also record the user, time, reviewer and value changed for what reason. 
 **Goals:** G1, G3, G5, SysG4
 
 # Acceptance Criteria
@@ -123,6 +122,8 @@ Scenario: Record valid usage that brings an item below minimum stock
 
 ### AC3 Reject Usage Above Available Quantity (FR2)
 ```gherkin
+Feature: Inventory quantity validation
+
 Scenario: Reject usage greater than available stock
   Given an item has 4 usable packs
   When a crew member attempts to record 5 packs used
@@ -131,8 +132,9 @@ Scenario: Reject usage greater than available stock
 ```
 
 ### AC4 Reject a Negative Quantity (FR2)
-
 ```gherkin
+Feature: Inventory quantity validation
+
 Scenario: Reject a negative inventory quantity
   Given an item has 4 usable packs
   When a crew member attempts to set its quantity to -1
@@ -142,16 +144,19 @@ Scenario: Reject a negative inventory quantity
 
 ### AC5 Keep Changes Consistent for Handovers (FR3)
 ```gherkin
+Feature: Inventory handover
+
 Scenario: The next shift can see a saved inventory change
-  Given a crew member records an item's new location and the system saves the change
+  Given a crew member records an item's valid quantity change
+  And the system saves the change
   When another crew member opens the same item record
-  Then the saved location is displayed
+  Then the updated quantity is displayed
   And this recent change is available in the update history
 ```
 
 ### AC6 Enforce Cargo Weight Capacity (FR5)
 ```gherkin
-Feature: Resupply planning
+Feature: Resupply cargo validation
 
 Scenario: Block a mission that exceeds weight capacity
   Given a mission has a 500 kg weight limit
@@ -164,6 +169,8 @@ Scenario: Block a mission that exceeds weight capacity
 
 ### AC7 Enforce Cargo Volume Capacity (FR5)
 ```gherkin
+Feature: Resupply cargo validation
+
 Scenario: Block a mission that exceeds volume capacity
   Given a mission's selected cargo is already at its volume limit
   When the planner adds another item with a positive volume and submits the plan
@@ -173,6 +180,8 @@ Scenario: Block a mission that exceeds volume capacity
 
 ### AC8 Require Cargo Measurements (FR5)
 ```gherkin
+Feature: Resupply cargo validation
+
 Scenario: Block submission when a selected item lacks a required measurement
   Given a selected resupply item has no recorded unit weight or volume
   When the planner attempts to submit the mission
@@ -182,6 +191,8 @@ Scenario: Block submission when a selected item lacks a required measurement
 
 ### AC9 Reapprove an Edited Manifest (FR6)
 ```gherkin
+Feature: Manifest approval confirmation
+
 Scenario: Editing an approved manifest before dispatch
   Given a resupply mission has an approved cargo manifest
   And the mission has not been dispatched
@@ -219,7 +230,7 @@ Feature: Shipment receiving
 Scenario: Record received cargo when some items are missing
   Given a Shipped mission lists 20 water packs
   And only 18 usable packs actually arrive
-  When Station Inventory Crew confirms only 18 packs recieved
+  When Station Inventory Crew confirms only 18 packs received
   Then the system adds 18 packs to inventory once
   And records the 2-pack shortage
   And shows the mission as Received
@@ -251,6 +262,8 @@ Scenario: Retry an update that Earth already accepted
 
 ### AC15 Resolve a Synchronization Conflict (FR11, FR12)
 ```gherkin
+Feature: Inventory synchronization
+
 Scenario: Keep competing changes for authorized review
   Given the station changed an item's location to Store B
   And Earth changed the same item's location to Store C
@@ -273,6 +286,8 @@ Scenario: Prevent an unauthorized user from approving a mission
 
 ### AC17 Audit an Accepted Change (FR12)
 ```gherkin
+Feature: Operation Audit
+
 Scenario: Record who changed an inventory item
   Given a signed-in user is authorized to update inventory
   When the user saves an accepted change to an item
