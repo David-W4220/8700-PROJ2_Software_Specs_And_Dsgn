@@ -1,6 +1,6 @@
-# Space Station Inventory and Resupply – Simplified Spec
+# Space Station Inventory and Resupply
 
-Oct 26, 2026 · @AyRidd03
+Oct 26, 2026 · Ayden Riddle (@AyRidd03)
 
 # Description
 
