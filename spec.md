@@ -165,3 +165,54 @@ Scenario: Keep station and Earth changes to the same item
   And an authorized reviewer can choose the correct location and enter a reason
   And the system records the chosen location, the reason, who made the choice, and when
 ```
+
+# Nonfunctional Requirements
+
+### NFR1 Save Inventory Changes
+The system should keep inventory changes saved even if the station loses communication with Earth or the application restarts.
+
+Priority: High
+Related: FR-003, AC-005
+
+### NFR2 Accurate Inventory
+The system should prevent negative quantities and stop crew members from recording more usage than what is available.
+
+Priority: High
+Related: FR-001, AC-002, AC-003
+
+### NFR3 Reliable Syncing
+The system should make sure inventory updates are not applied more than once when communication comes back.
+
+Priority: High
+Related: FR-004, AC-006, AC-007
+
+### NFR4 Handle Conflicting Changes
+If the station and Earth both change the same item, the system should save both changes until someone authorized reviews them.
+
+Priority: High
+Related: FR-004, AC-008
+
+### NFR5 User Permissions
+The system should check that users are signed in and only allow authorized users to resolve inventory conflicts.
+
+Priority: High
+Related: FR-001, FR-004, AC-008
+
+### NFR6 Track Changes
+The system should keep a record of who made inventory changes and when they happened.
+
+Priority: High
+Related: FR-001, AC-001
+
+### NFR7 Show Sync Status
+The system should show how many updates are waiting to sync and when the last successful sync happened.
+
+Priority: Medium
+Related: FR-002, FR-003, AC-004, AC-005
+
+### NFR8 Clear Inventory Information
+The system should display inventory quantities with their correct units so users know how much of an item is available.
+
+Priority: Medium
+Related: FR-001, FR-002, AC-004
+
