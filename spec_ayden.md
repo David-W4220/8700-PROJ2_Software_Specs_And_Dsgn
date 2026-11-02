@@ -781,3 +781,29 @@ AC-032: Request validation (FR-032)
       | a 2,000-character reason                     |
       | a missing or invalid signature               |
 ```
+# Revision notes
+
+Revised Nov 2, 2026 to resolve the Spec issues raised in the initial `architecture_ayden.md`.
+
+| # | Issue | Resolution | Changed |
+|---|---|---|---|
+| 1 | No Non-goals section | Added a Non-goals section. | Non-goals |
+| 2 | Deleting acknowledged updates | Updates are never deleted; acknowledgement only removes them from the queue. | InventoryUpdate, FR-027, NFR-001, NFR-006, NFR-008 |
+| 3 | Device credential allowed | Updates must be signed with the recorder's own key. | NFR-003, AC-032 |
+| 4 | Who `recordedBy` is | `recordedBy` is the user whose key signed the update. | NFR-003, AC-032 |
+| 5 | Recording order versus held updates | Order is guaranteed per item; held updates are sent after the conflict is resolved. | FR-029 |
+| 6 | Backoff cap versus start time | Link checks run every 30 seconds regardless of backoff; backoff applies only to failed requests. | NFR-004 |
+| 7 | `baseVersion` for consecutive offline updates | Defined `baseVersion`; the station's own earlier updates never cause a conflict. | InventoryUpdate, FR-030, AC-030 |
+| 8 | Local effect of a Rejected update | Removed at the next sync; the update stays in history. | FR-029, AC-029 |
+| 9 | Receipt as a sync unit | Added `receiptId`; a receipt syncs and deduplicates as one unit. | ResupplyMission, FR-025 |
+| 10 | Receipt touching a conflicted item | The whole receipt waits; Earth shows Shipped until it arrives. | FR-025, FR-028, AC-025 |
+| 11 | Display IDs for Earth updates | Station updates use U…, Earth updates use E…. | InventoryUpdate |
+| 12 | "Fully completed" sync | Defined, along with Earth-side link availability. | FR-002 |
+| 13 | Alerts across sites | Alerts are derived on each side and not synchronized. | SupplyAlert, NFR-007 |
+| 14 | Setting expected arrival | Can be set or changed in Draft or Approved; each change is a new manifest version. | Lifecycle, FR-016, AC-016 |
+| 15 | Loading data on reopen | Loaded quantities are cleared; loading issues are kept. | LoadingIssue, lifecycle, FR-020, NFR-006, AC-020 |
+| 16 | Rejected updates on S7 | S7 lists Rejected updates for 7 days. | FR-028, AC-028 |
+| 17 | User and key management | Out of scope; supplied by the identity system and synced to the station. Revoked keys are honored. | Non-goals, User, NFR-003 |
+| 18 | Correction versus concurrent usage | A quantity correction conflicts with any concurrent quantity change. | FR-030, AC-030 |
+| 19 | History ordering | Ties are broken by commit order on the side showing the history. | FR-011 |
+| 20 | "Recent activity" events | Defined which records count as events. | FR-001 |
