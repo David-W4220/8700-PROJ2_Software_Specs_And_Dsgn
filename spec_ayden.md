@@ -1,6 +1,6 @@
 # Space Station Inventory and Resupply
 
-Oct 26, 2026 · Ayden Riddle (@AyRidd03)
+Oct 26, 2026 · Ayden Riddle (@AyRidd03) · Revised Nov 2, 2026 (see Revision notes)
 
 # Description
 
@@ -14,11 +14,21 @@ The Space Station Inventory and Resupply system keeps one crewed station's inven
 4. Make every mission and inventory change traceable, attributable to a person, and performed only by an authorized role.
 5. Synchronize station and Earth records without losing an update, applying one twice, or silently overwriting a conflicting change.
 
+# Non-goals
+
+- More than one station.
+- More than one inventory record per supply type, or one record at more than one location.
+- Consumption forecasting.
+- Per-batch tracking.
+- Splitting items across locations.
+- Notifications outside the app.
+- Administering user accounts, roles, the `canReopen` flag and signing keys. These come from the organization's identity system; this system only uses them (see User).
+
 # Domain Model
 
 ## Actors
 
-- **User** – Any authenticated person. Has a `userId`, a `name` and exactly one `role`. Every role can view every screen; the client hides controls the role cannot use and the Earth service rejects them anyway.
+- **User** – Any authenticated person. Has a `userId`, a `name`, exactly one `role` and a personal signing key pair. Every role can view every screen; the client hides controls the role cannot use and the Earth service rejects them anyway. User records, roles, the `canReopen` flag and public keys come from the organization's identity system and reach the station on each sync.
 - **Station Inventory Crew** (`StationCrew`) – Astronauts aboard the station, often working offline. They record usage, moves, condition changes and stock corrections, record receipt of shipped missions, and report unlisted delivered items.
 - **Logistics Planner** (`LogisticsPlanner`) – Earth-based staff. They manage item data and storage locations, create and edit missions and manifests, submit missions for approval, and record loading review.
 - **Ground Mission Control** (`GroundMissionControl`) – Earth-based authority. They approve, return, cancel and dispatch missions, and reopen approved missions only if their `canReopen` flag is set. They also correct stock from Earth and resolve discrepancies and sync conflicts.
@@ -35,18 +45,20 @@ Fields marked *server-set* are never accepted from a client.
   - One record per supply type, `storedAt` exactly one StorageLocation; `quantity` ≥ 0.
   - `condition` is Usable or Damaged and applies to the whole record; `criticality` is Critical or Standard.
   - `expiryDate` is the earliest expiry on board; barcodes are unique across items.
-- **InventoryUpdate** – `updateId` (a UUID made on the device), `displayId` (U101…), `type`, `field`, `oldValue`, `newValue`, `quantityDelta`, `reason?`, `eventTime`, `baseVersion`, `syncStatus`, `recordedBy` *(server-set)*, `receivedAt` *(server-set)*.
+- **InventoryUpdate** – `updateId` (a UUID made on the device), `displayId` (U101… for station updates, E101… for Earth updates), `type`, `field`, `oldValue`, `newValue`, `quantityDelta`, `reason?`, `eventTime`, `baseVersion`, `syncStatus`, `signature`, `recordedBy` *(server-set)*, `receivedAt` *(server-set)*.
   - Each update `affectsItem` one InventoryItem.
   - `type` is Usage, Move, Condition, Correction, Receipt or Resolution.
   - `syncStatus` is Awaiting sync, Synchronized, Conflict or Rejected.
-- **SupplyAlert** – `alertId`, `alertStatus` (Active or Resolved), `raisedAt`, `resolvedAt?`. Each alert is `aboutItem` one InventoryItem, and an item has at most one Active alert.
-- **ResupplyMission** – `missionId` *(server-set: R1, R2…)*, `missionStatus`, `massCapacityKg`, `volumeCapacityM3`, `expectedArrival?`, `dispatchedAt?`, `statusHistory[]`.
+  - Updates are never deleted. A station update is *queued* while it is Awaiting sync, leaves the queue when Earth acknowledges it, and stays in history.
+  - `baseVersion` is the latest Earth version of the item that the station had received when the update was recorded.
+- **SupplyAlert** – `alertId`, `alertStatus` (Active or Resolved), `raisedAt`, `resolvedAt?`. Each alert is `aboutItem` one InventoryItem, and an item has at most one Active alert. Alerts are derived separately on the station and on Earth from each side's own item records and are not synchronized; `raisedAt` and `resolvedAt` are the event time of the change that raised or resolved the alert.
+- **ResupplyMission** – `missionId` *(server-set: R1, R2…)*, `missionStatus`, `massCapacityKg`, `volumeCapacityM3`, `expectedArrival?`, `dispatchedAt?`, `receiptId?` (a UUID made on the device when receipt is recorded), `statusHistory[]`.
   - Capacities are > 0.
   - Each history entry holds status, time, user and reason.
   - Each mission `hasManifest` one CargoManifest.
 - **CargoManifest** – `manifestVersion`, starting at 1 when the mission is created. It `hasLine` zero or more ManifestLines. Earlier versions are kept read-only.
 - **ManifestLine** – `lineQuantity` (> 0), `loadedQuantity?`, `receivedQuantity?`. Each line is `forItem` one InventoryItem; a manifest has at most one line per item.
-- **LoadingIssue** – `text`, `recordedBy`, `time`. Belongs to one mission.
+- **LoadingIssue** – `text`, `recordedBy`, `time`. Belongs to one mission. Loading issues are kept when a mission is reopened.
 - **Discrepancy** – `discrepancyId`, `description`, `expected`, `received`, `status` (Open or Resolved), `resolutionNote?`. Belongs to one mission, and to one item unless it reports an unlisted item.
 
 **Mission lifecycle (state machine).** The Earth service rejects every transition not listed here.
@@ -54,12 +66,12 @@ Fields marked *server-set* are never accepted from a client.
 - Draft →(submit \[≥ 1 line; total mass and volume each ≤ capacity\])→ Submitted
 - Submitted →(approve \[capacity re-checked\])→ Approved
 - Submitted →(return \[reason\])→ Draft
-- Approved →(reopen \[`canReopen`; reason; loading data cleared\])→ Draft
+- Approved →(reopen \[`canReopen`; reason; loaded quantities cleared\])→ Draft
 - Approved →(confirm dispatch \[every line has a loaded quantity; expected arrival set\])→ Shipped
 - Shipped →(record receipt \[received quantity for every line\])→ Received
 - Draft, Submitted or Approved →(cancel \[reason\])→ Cancelled
 
-Cancelled and Received are final. Shipped missions cannot be cancelled.
+Cancelled and Received are final. Shipped missions cannot be cancelled. The expected arrival may be set or changed in Draft or Approved (FR-016). The station records Shipped → Received offline; Earth applies it when the receipt is synchronized (FR-025).
 
 # Functional Requirements
 
@@ -71,9 +83,11 @@ The goals each requirement supports are in brackets.
   - Alerts: Critical items first, shown as "\<item> below minimum (\<qty> / \<min> \<unit>)".
   - Next mission: the Submitted, Approved or Shipped mission with the earliest expected arrival, or the most recently changed if none has one.
   - Pending updates: Awaiting sync plus Conflict; on Earth, the count the station last reported.
-  - Recent activity: the last 10 events from the past 7 days.
+  - Recent activity: the last 10 events from the past 7 days. An event is an inventory update, a mission status change, a discrepancy recorded or resolved, or a supply alert raised or resolved.
 - **FR-002:** As a user, I want every screen to show whether the link is available and when the last synchronization fully completed, so that I know how current my data is. \[Goals 1, 5\]
   - On the station the banner says "Earth link"; on Earth it says "Station link".
+  - A synchronization has fully completed when every station update not held behind an open conflict (FR-030) has been acknowledged and the station has applied every Earth change made before the pull started.
+  - On Earth, the link is shown as available while a sync session is open or the station has contacted Earth within the last 60 seconds.
 - **FR-003:** As a user, I want to see only the controls my role permits, and have the Earth service reject any action my role is not allowed, so that each action is performed only by authorized people. \[Goal 4\]
 
 ### Inventory
@@ -92,6 +106,7 @@ The goals each requirement supports are in brackets.
 - **FR-010:** As a logistics planner, I want to create items and storage locations and edit item names, barcodes, minimums, criticality, unit mass and unit volume, so that inventory data and alert thresholds stay correct. \[Goals 1, 2\]
   - These changes reach the station on the next sync.
 - **FR-011:** As a user, I want to view an item's change history, newest first, so that I can trace who changed what and when. \[Goals 1, 4\]
+  - Entries are ordered by event time. Entries with the same event time are ordered by when they were committed on the side showing the history.
   - Each entry shows display ID, change, event time, user and sync status.
   - History includes Earth corrections, receipts and conflict resolutions.
 
@@ -115,6 +130,7 @@ The goals each requirement supports are in brackets.
 - **FR-016:** As a logistics planner, I want each save that changes a draft's lines, capacities or expected arrival to create a new manifest version, so that everyone knows which cargo list is current. \[Goals 3, 4\]
   - A save with no changes keeps the version.
   - A save made against an out-of-date version is rejected.
+  - A logistics planner may also set or change the expected arrival of an Approved mission. This creates a new manifest version and follows the same rules.
 - **FR-017:** As a logistics planner, I want to submit a draft only when it has at least one line and its mass and volume are each within capacity, so that only feasible plans reach approval. \[Goal 3\]
   - When submission fails, every failing check is listed.
 
@@ -123,7 +139,7 @@ The goals each requirement supports are in brackets.
 - **FR-018:** As ground mission control, I want to approve a submitted mission after capacity is re-checked, so that it can proceed to loading and dispatch. \[Goal 4\]
 - **FR-019:** As ground mission control, I want to return a submitted mission to Draft with a reason, so that the planner can correct it. \[Goal 4\]
 - **FR-020:** As ground mission control with reopen permission, I want to reopen an approved mission to Draft with a reason, so that late changes are made in a controlled way. \[Goal 4\]
-  - Reopening clears the loading data.
+  - Reopening clears the loaded quantities. Loading issues are kept.
 - **FR-021:** As ground mission control, I want to cancel a Draft, Submitted or Approved mission with a reason, so that unneeded missions stop. \[Goal 4\]
   - Shipped, Received and Cancelled missions cannot be cancelled.
 - **FR-022:** As a logistics planner, I want to record a loaded quantity for each line of an approved mission and note loading issues, so that missing cargo is identified before dispatch. \[Goal 4\]
@@ -137,20 +153,28 @@ The goals each requirement supports are in brackets.
 - **FR-025:** As a station inventory crew member, I want to record receipt of a shipped mission by entering the delivered quantity for every line in one submission, even offline, so that inventory reflects what actually arrived. \[Goals 1, 4\]
   - Received quantities are ≥ 0.
   - Each line with a received quantity above 0 creates a Receipt update.
+  - The receipt is given a `receiptId` on the device. Its mission status change, Receipt updates and discrepancies are synchronized as one unit and deduplicated by `receiptId`, with the same resend rules as FR-029.
+  - If any item in the receipt has an open conflict, the whole receipt waits (FR-030), and Earth shows the mission as Shipped until the receipt arrives.
 - **FR-026:** As a station inventory crew member, I want a discrepancy recorded automatically for every line where received differs from planned, and to report unlisted items, so that mismatches stay visible until mission control resolves them with a note. \[Goals 1, 4\]
   - Unlisted items do not change inventory.
 
 ### Offline operation and synchronization
 
 - **FR-027:** As a station inventory crew member, I want every inventory change validated and saved in the onboard store before it is shown as saved, so that I can keep working without the Earth link. \[Goals 1, 5\]
-  - A queued update is never deleted until Earth acknowledges it.
-- **FR-028:** As a station inventory crew member, I want to see the updates that are awaiting sync or in conflict, oldest first, so that I know what has not yet reached Earth. \[Goal 5\]
+  - Updates are never deleted. A queued update stays queued until Earth acknowledges it and stays in history after that.
+- **FR-028:** As a station inventory crew member, I want to see the updates that are awaiting sync, in conflict or rejected by Earth, oldest first, so that I know what has not reached Earth or was not accepted. \[Goal 5\]
+  - Rejected updates are listed for 7 days after Earth rejects them.
+  - Updates and receipts waiting behind an open conflict show "Waiting for conflict review".
 - **FR-029:** As a user, I want updates to synchronize automatically when the link returns and on demand, so that none is lost or applied twice. \[Goal 5\]
   - Station updates are sent in recording order, then Earth changes since the last sync are pulled.
+  - Updates held behind an open conflict (FR-030) are skipped and are sent, in recording order, once the conflict is resolved. Updates to any one item always reach Earth in recording order.
   - Earth deduplicates by update ID. A resend with identical content gets the original acknowledgement; a resend with different content is Rejected.
   - Each acknowledgement carries the new item version. Failures are retried with backoff.
+  - A Rejected update has no effect on Earth. On the station, its effect is removed at the next sync, when the item takes Earth's value; the update stays in history as Rejected.
 - **FR-030:** As ground mission control, I want an update made against an out-of-date version to be merged when it touches a different field, and flagged as a conflict when the same field changed on both sides or the result would be negative, so that correct data is never silently lost. \[Goal 5\]
   - Usage and receipt quantity changes from both sides are added together rather than conflicting.
+  - A field counts as changed on Earth only if a change that did not come from this station's own earlier updates set it after the update's `baseVersion`. Successive station updates to the same field never conflict with each other.
+  - A correction sets an absolute value, so a quantity correction on one side and any quantity change on the other side conflict.
   - While a conflict is open, the station keeps its local value marked "Review required", and later updates on that item wait in the queue.
 - **FR-031:** As ground mission control, I want to resolve a conflict by keeping the local or the Earth value with a reason, so that the decision is deliberate and documented. \[Goals 4, 5\]
   - The first resolution wins.
@@ -171,7 +195,7 @@ The goals each requirement supports are in brackets. Requirements are numbered i
   - The onboard store serializes concurrent writes from all station devices, so each validation runs against the current quantity and `quantity` never goes below 0.
   - A receipt (FR-025) commits its mission status, Receipt updates and discrepancies together or not at all.
   - The Earth service applies each mission, manifest and item change atomically, so stale saves (FR-016), first-resolution-wins (FR-031) and stale status checks (FR-032) hold under concurrent requests.
-  - Traces to FR-027 ("never deleted until Earth acknowledges it"), FR-006 (amount ≤ current local quantity) and the onboard store "shared by all station devices".
+  - Traces to FR-027 ("never deleted"), FR-006 (amount ≤ current local quantity) and the onboard store "shared by all station devices".
 - **NFR-002:** The station performs every crew function with no Earth link for at least 30 days and with at least 10,000 queued updates, without loss of function or noticeable slowdown. \[Goals 1, 5\]
   - No crew action depends on a call to the Earth service.
   - The S7 Sync list (FR-028) and the pending count (FR-001) stay usable at full queue size.
@@ -180,18 +204,20 @@ The goals each requirement supports are in brackets. Requirements are numbered i
 ### Security
 
 - **NFR-003:** Users authenticate on the station without the Earth link, and every update carries verifiable proof of the person who recorded it. \[Goal 4\]
-  - Each update is signed with the recording user's or device's credential when it is saved, and Earth checks the signature before setting `recordedBy`.
+  - Each update is signed with the recording user's own key when it is saved, and Earth checks the signature before setting `recordedBy`. A device credential alone is not enough, because it does not identify a person.
+  - Earth rejects an update signed with a key that was revoked before the update's event time. Revocations reach the station on the next sync.
   - `recordedBy` is the person who recorded the update, not the user whose session sends the sync batch.
   - All traffic between the station and Earth is encrypted and integrity-protected.
   - Every permission is enforced by the Earth service regardless of what the client shows.
-  - Traces to Goal 4 ("attributable to a person"), FR-003, FR-029 (automatic sync when the link returns), FR-032 ("malicious client") and AC-032 ("the signed-in user").
+  - Traces to Goal 4 ("attributable to a person"), FR-003, FR-029 (automatic sync when the link returns), FR-032 ("malicious client") and AC-032 (`recordedBy` comes from the signature).
 
 ### Synchronization
 
 - **NFR-004:** Synchronization makes durable progress within short or interrupted link windows. \[Goal 5\]
   - A batch interrupted mid-transfer resumes from the last acknowledged update without resending, reordering or skipping updates.
   - At least 1,000 queued updates synchronize within a 10-minute link window.
-  - Retry backoff is capped at 60 seconds, and sync starts within 30 seconds of the link returning.
+  - The station checks the link at least every 30 seconds, independently of retry backoff, so sync starts within 30 seconds of the link returning.
+  - Retry backoff applies to failed requests while the link is available and is capped at 60 seconds.
   - Traces to FR-002 (last sync "fully completed", implying partial syncs) and FR-029 (recording order, deduplication, retries with backoff).
 - **NFR-005:** Station devices and the Earth service keep UTC within ±30 seconds of a reference clock, including after a long outage. \[Goals 1, 4, 5\]
   - Devices detect and correct drift at each sync and warn the crew when drift may exceed the tolerance.
@@ -201,7 +227,7 @@ The goals each requirement supports are in brackets. Requirements are numbered i
 ### Traceability
 
 - **NFR-006:** History records are append-only and retained for the station's operational life. \[Goal 4\]
-  - No role or interface can edit or delete item history, mission status history, earlier manifest versions, discrepancy notes or conflict resolutions.
+  - No role or interface can edit or delete item history, mission status history, earlier manifest versions, loading issues, discrepancy notes or conflict resolutions. Only an update's `syncStatus` may change.
   - Records survive backup and restore unchanged.
   - Traces to Goal 4, FR-011, FR-024, FR-026, FR-031, the read-only earlier manifest versions in CargoManifest, and the mandatory reasons on returns, reopens, cancels, corrections and resolutions.
 
@@ -210,13 +236,13 @@ The goals each requirement supports are in brackets. Requirements are numbered i
 - **NFR-007:** Shortages and inventory lookups appear without noticeable delay. \[Goals 2, 1\]
   - On the station, a supply alert appears within 1 second of the change that triggers it.
   - Search and barcode lookup return within 1 second for the full inventory.
-  - On Earth, a station alert appears within 1 minute of the sync that delivers it, and the link banner (FR-002) shows how current the data is.
+  - On Earth, an alert caused by a station update appears within 1 minute of the sync that delivers that update, and the link banner (FR-002) shows how current the data is. An alert raised and resolved on the station between two syncs does not appear on Earth; the updates that caused it do.
   - Traces to Goal 2 ("the moment it occurs"), FR-012 ("noticed immediately"), FR-004 and FR-001 (the Earth pending count is "the count the station last reported").
 - **NFR-008:** The Earth service is available at least 99.9% of the time and recovers without losing acknowledged updates. \[Goal 5\]
   - Planned maintenance is scheduled outside expected link windows.
   - Backups allow recovery with no more than 5 minutes of data loss and within 1 hour of a failure.
   - A restore never rolls back past an update that has been acknowledged to the station.
-  - Traces to the Earth Service actor (system of record for versions, deduplication and conflicts) and FR-027 (the station deletes an update once Earth acknowledges it, so a rollback past that point loses it on both sides).
+  - Traces to the Earth Service actor (system of record for versions, deduplication and conflicts) and FR-027 (the station stops resending an update once Earth acknowledges it, so a rollback past that point loses it from Earth).
 
 ### Priority
 
@@ -459,6 +485,11 @@ AC-016: Save draft and versioning (FR-016)
     Given another planner saved version 3
     When I save changes made against version 2
     Then my save is rejected and version 3 is unchanged
+
+  Scenario: Set expected arrival while Approved
+    Given Mission R12 is Approved with manifest version 3 and no expected arrival
+    When I set the expected arrival to 2026-11-20 14:00 UTC and save
+    Then the manifest version becomes 4 and Mission R12 remains Approved
 ```
 
 ```gherkin
@@ -511,6 +542,7 @@ AC-020: Reopen approved mission (FR-020)
     And I am ground mission control with reopen permission
     When I reopen Mission R12 with reason "Late change"
     Then it becomes Draft and its loaded quantities are cleared
+    And its loading issues are still shown
 
   Scenario: Unauthorized reopen
     Given Mission R12 is Approved
@@ -597,6 +629,14 @@ AC-025: Record receipt (FR-025)
     Given Mission R12 is Received
     When the same receipt is sent again
     Then the original result is returned and quantities do not change again
+
+  Scenario: Receipt waits behind a conflict
+    Given Mission R12 is Shipped with 20 water packs
+    And water packs have an open conflict
+    When I record 20 water packs received
+    Then Mission R12 is Received on the station
+    And the receipt shows "Waiting for conflict review" on the Sync screen
+    And Mission R12 remains Shipped on Earth until the conflict is resolved and the receipt is synchronized
 ```
 
 ```gherkin
@@ -634,6 +674,12 @@ AC-028: Pending updates list (FR-028)
     When I open the Sync screen
     Then I see "2 updates pending" and "Inventory remains available locally"
     And U101 is listed before U102, both "Awaiting sync"
+
+  Scenario: Rejected update is listed
+    Given Earth rejected U105 today
+    When I open the Sync screen
+    Then U105 is listed as "Rejected"
+    And it is not counted in the pending updates
 ```
 
 ```gherkin
@@ -653,6 +699,12 @@ AC-029: Synchronize (FR-029)
   Scenario: Altered resend
     When U101 is sent again with a different quantity delta
     Then it is Rejected and shown on the Sync screen
+
+  Scenario: Rejected update loses its local effect
+    Given the station recorded U105 (water packs used 2) and Earth rejected it
+    When the next sync completes
+    Then water packs show Earth's quantity
+    And U105 remains in the history with sync status "Rejected"
 ```
 
 ```gherkin
@@ -670,6 +722,18 @@ AC-030: Conflict detection (FR-030)
     And ground mission control corrected the water packs expiry date on Earth
     When the usage is synchronized
     Then both changes apply and no conflict is raised
+
+  Scenario: Successive station changes to the same field
+    Given the station moved the repair kit to Store C as U103 and then to Store A as U105
+    And nothing changed the repair kit on Earth
+    When U103 and U105 are synchronized
+    Then both apply in order, the location becomes Store A and no conflict is raised
+
+  Scenario: Correction meets usage
+    Given the station recorded usage of 2 water packs
+    And ground mission control corrected the water pack quantity on Earth
+    When the usage is synchronized
+    Then the usage is flagged as Conflict
 ```
 
 ```gherkin
@@ -699,7 +763,13 @@ AC-031: Conflict resolution (FR-031)
 AC-032: Request validation (FR-032)
   Scenario: Spoofed author
     When an update arrives with recordedBy set to another user
-    Then it is stored with the signed-in user as recordedBy
+    Then it is stored with the user whose key signed it as recordedBy
+
+  Scenario: Batch sent by a different person
+    Given crew member A recorded U101 while offline
+    And crew member B is signed in when the link returns
+    When U101 is synchronized
+    Then U101 is stored with A as recordedBy
 
   Scenario Outline: Rejected requests
     When an update arrives with <problem>
@@ -709,4 +779,32 @@ AC-032: Request validation (FR-032)
       | an event time 1 hour in the future           |
       | a base version newer than the item's version |
       | a 2,000-character reason                     |
+      | a missing or invalid signature               |
 ```
+
+# Revision notes
+
+Revised Nov 2, 2026 to resolve the Spec issues raised in `architecture.md`. Numbers refer to that list.
+
+| # | Issue | Resolution | Changed |
+|---|---|---|---|
+| 1 | No Non-goals section | Added a Non-goals section. | Non-goals |
+| 2 | Deleting acknowledged updates | Updates are never deleted; acknowledgement only removes them from the queue. | InventoryUpdate, FR-027, NFR-001, NFR-006, NFR-008 |
+| 3 | Device credential allowed | Updates must be signed with the recorder's own key. | NFR-003, AC-032 |
+| 4 | Who `recordedBy` is | `recordedBy` is the user whose key signed the update. | NFR-003, AC-032 |
+| 5 | Recording order versus held updates | Order is guaranteed per item; held updates are sent after the conflict is resolved. | FR-029 |
+| 6 | Backoff cap versus start time | Link checks run every 30 seconds regardless of backoff; backoff applies only to failed requests. | NFR-004 |
+| 7 | `baseVersion` for consecutive offline updates | Defined `baseVersion`; the station's own earlier updates never cause a conflict. | InventoryUpdate, FR-030, AC-030 |
+| 8 | Local effect of a Rejected update | Removed at the next sync; the update stays in history. | FR-029, AC-029 |
+| 9 | Receipt as a sync unit | Added `receiptId`; a receipt syncs and deduplicates as one unit. | ResupplyMission, FR-025 |
+| 10 | Receipt touching a conflicted item | The whole receipt waits; Earth shows Shipped until it arrives. | FR-025, FR-028, AC-025 |
+| 11 | Display IDs for Earth updates | Station updates use U…, Earth updates use E…. | InventoryUpdate |
+| 12 | "Fully completed" sync | Defined, along with Earth-side link availability. | FR-002 |
+| 13 | Alerts across sites | Alerts are derived on each side and not synchronized. | SupplyAlert, NFR-007 |
+| 14 | Setting expected arrival | Can be set or changed in Draft or Approved; each change is a new manifest version. | Lifecycle, FR-016, AC-016 |
+| 15 | Loading data on reopen | Loaded quantities are cleared; loading issues are kept. | LoadingIssue, lifecycle, FR-020, NFR-006, AC-020 |
+| 16 | Rejected updates on S7 | S7 lists Rejected updates for 7 days. | FR-028, AC-028 |
+| 17 | User and key management | Out of scope; supplied by the identity system and synced to the station. Revoked keys are honored. | Non-goals, User, NFR-003 |
+| 18 | Correction versus concurrent usage | A quantity correction conflicts with any concurrent quantity change. | FR-030, AC-030 |
+| 19 | History ordering | Ties are broken by commit order on the side showing the history. | FR-011 |
+| 20 | "Recent activity" events | Defined which records count as events. | FR-001 |
