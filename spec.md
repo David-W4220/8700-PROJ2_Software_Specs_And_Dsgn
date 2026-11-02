@@ -293,3 +293,31 @@ Scenario: Record who changed an inventory item
   When the user saves an accepted change to an item
   Then the system records the user's identity, the time, and the change details
 ```
+
+# Nonfunctional Requirements
+The following nonfunctional requirements define the necessary quality attributes and operational constraints to support our system's goals.
+
+### NFR1 — Offline Availability (High Priority)
+When communition with Earth is unavaliable, the application shall still allow Station Inventory Crew to view locally stored inventory records and record valid inventory changes.
+
+**Reason:** The system must remain usable during communication outages. This supports SysG4 (Maintain Inventory Availability During Communication Loss), FR10, and AC13.
+
+### NFR2 — Local Data Durability (High Priority)
+When a inventory update is confirmed saved locally, it shall remain available after the application restarts. Pending updates shall also remain stored until they are acknowledged by Earth.
+
+**Reason:** Inventory changes must survive application restarts and communication outages. This supports FR10, FR11, and AC13.
+
+### NFR3 — Synchronization Recovery (Medium Priority)
+The system shall start to synchronize pending inventory updates within 60 seconds after detecting that the communication with Earth has been restored. Failed synchronizations shall remain the failed updates as pending.
+
+**Reason:** Timely synchronization helps ensuring the station's inventory records to be consistent with Earth;s records. This supports FR11, AC14, and AC15.
+
+### NFR4 — Security (High Priority)
+Assess to current inventory and mission records shall require authentication and stored records on the station and Earth shall be encrypted. Data transmittion between earth and station shall also be encrypted. Role-based permissions shall restrict users to the operations allowed for their assigned roles.
+
+**Reason:** Inventory records and operational information must be protected from unauthorized access or modification. This supports FR12, AC16, and AC17.
+
+### NFR5 — Search Performance (Medium Priority)
+Searching through 10,000 inventory records shall return results within 2 seconds in at least 95 out of 100 trials on the team's agreed test device.
+
+**Reason:** Crew members need to recieve inventory information efficiently. This This retains the measurable performance target from Project 1 and supports G1, FR1, and AC1.
