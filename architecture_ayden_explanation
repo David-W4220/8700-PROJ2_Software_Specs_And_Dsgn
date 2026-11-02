@@ -1,0 +1,5 @@
+Since going through the initial changes in the spec, using the AI prompts has raised several holes in the spec that I had presented in the assignment before. 
+The initial archhitecture file had a list of 20 issues, and I did my best to resolve each issue with the help of AI. 
+I realized there were a lot of security flaws presented such as the device key acceptance, deleting aknoledgement updates, and access key management.
+These have all been resolved and recorded in my specs file. 
+I also had AI resolve the smaller clarification issues and format the revision notes as well as recreate the architecture file with the new changes.
