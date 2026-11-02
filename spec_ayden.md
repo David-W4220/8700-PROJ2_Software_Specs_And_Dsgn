@@ -161,6 +161,72 @@ The goals each requirement supports are in brackets.
   - Any action based on a stale status or version is checked against current state and rejected.
   - All text is escaped when shown.
 
+# Nonfunctional Requirements
+
+The goals each requirement supports are in brackets. Requirements are numbered in priority order. Targets are proposed starting values to be confirmed with stakeholders.
+
+### Data integrity and offline operation
+
+- **NFR-001:** Every change shown as saved survives a crash, power loss or device restart, and every change commits all-or-nothing on both the station and Earth. \[Goals 1, 5\]
+  - The onboard store serializes concurrent writes from all station devices, so each validation runs against the current quantity and `quantity` never goes below 0.
+  - A receipt (FR-025) commits its mission status, Receipt updates and discrepancies together or not at all.
+  - The Earth service applies each mission, manifest and item change atomically, so stale saves (FR-016), first-resolution-wins (FR-031) and stale status checks (FR-032) hold under concurrent requests.
+  - Traces to FR-027 ("never deleted until Earth acknowledges it"), FR-006 (amount ≤ current local quantity) and the onboard store "shared by all station devices".
+- **NFR-002:** The station performs every crew function with no Earth link for at least 30 days and with at least 10,000 queued updates, without loss of function or noticeable slowdown. \[Goals 1, 5\]
+  - No crew action depends on a call to the Earth service.
+  - The S7 Sync list (FR-028) and the pending count (FR-001) stay usable at full queue size.
+  - Traces to Goal 1 ("including while the Earth link is down"), FR-025 (receipt "even offline"), AC-002 (last sync a week earlier) and FR-030 (later updates on a conflicted item wait in the queue, so the queue can grow while the link is up).
+
+### Security
+
+- **NFR-003:** Users authenticate on the station without the Earth link, and every update carries verifiable proof of the person who recorded it. \[Goal 4\]
+  - Each update is signed with the recording user's or device's credential when it is saved, and Earth checks the signature before setting `recordedBy`.
+  - `recordedBy` is the person who recorded the update, not the user whose session sends the sync batch.
+  - All traffic between the station and Earth is encrypted and integrity-protected.
+  - Every permission is enforced by the Earth service regardless of what the client shows.
+  - Traces to Goal 4 ("attributable to a person"), FR-003, FR-029 (automatic sync when the link returns), FR-032 ("malicious client") and AC-032 ("the signed-in user").
+
+### Synchronization
+
+- **NFR-004:** Synchronization makes durable progress within short or interrupted link windows. \[Goal 5\]
+  - A batch interrupted mid-transfer resumes from the last acknowledged update without resending, reordering or skipping updates.
+  - At least 1,000 queued updates synchronize within a 10-minute link window.
+  - Retry backoff is capped at 60 seconds, and sync starts within 30 seconds of the link returning.
+  - Traces to FR-002 (last sync "fully completed", implying partial syncs) and FR-029 (recording order, deduplication, retries with backoff).
+- **NFR-005:** Station devices and the Earth service keep UTC within ±30 seconds of a reference clock, including after a long outage. \[Goals 1, 4, 5\]
+  - Devices detect and correct drift at each sync and warn the crew when drift may exceed the tolerance.
+  - All date logic, including "today", "Expired" and "past 7 days", uses UTC.
+  - Traces to FR-032 (event times more than 5 minutes in the future are rejected), FR-011 (history ordered by event time), FR-004 (expiry before today), FR-001 (past 7 days) and the Description's UTC display rules.
+
+### Traceability
+
+- **NFR-006:** History records are append-only and retained for the station's operational life. \[Goal 4\]
+  - No role or interface can edit or delete item history, mission status history, earlier manifest versions, discrepancy notes or conflict resolutions.
+  - Records survive backup and restore unchanged.
+  - Traces to Goal 4, FR-011, FR-024, FR-026, FR-031, the read-only earlier manifest versions in CargoManifest, and the mandatory reasons on returns, reopens, cancels, corrections and resolutions.
+
+### Performance and service operations
+
+- **NFR-007:** Shortages and inventory lookups appear without noticeable delay. \[Goals 2, 1\]
+  - On the station, a supply alert appears within 1 second of the change that triggers it.
+  - Search and barcode lookup return within 1 second for the full inventory.
+  - On Earth, a station alert appears within 1 minute of the sync that delivers it, and the link banner (FR-002) shows how current the data is.
+  - Traces to Goal 2 ("the moment it occurs"), FR-012 ("noticed immediately"), FR-004 and FR-001 (the Earth pending count is "the count the station last reported").
+- **NFR-008:** The Earth service is available at least 99.9% of the time and recovers without losing acknowledged updates. \[Goal 5\]
+  - Planned maintenance is scheduled outside expected link windows.
+  - Backups allow recovery with no more than 5 minutes of data loss and within 1 hour of a failure.
+  - A restore never rolls back past an update that has been acknowledged to the station.
+  - Traces to the Earth Service actor (system of record for versions, deduplication and conflicts) and FR-027 (the station deletes an update once Earth acknowledges it, so a rollback past that point loses it on both sides).
+
+### Priority
+
+- NFR-001 and NFR-002 come first because a lost update cannot be recovered and both shape the storage design, which is costly to change later.
+- NFR-003 comes next because offline attribution is an open design question that must be settled before the sync protocol is fixed.
+- NFR-004 and NFR-005 make FR-029 and FR-032 work under real link and clock conditions; ignoring clock drift can cause legitimate updates to be rejected in bulk after a long outage.
+- NFR-006 mostly documents guarantees for records the domain model already defines.
+- NFR-007 is likely easy to meet because alerts are computed locally; its main value is defining Earth-side freshness.
+- NFR-008 is operational tuning, except for its no-rollback-past-acknowledgement rule, which can be moved into NFR-001 if it should be tracked with the other integrity guarantees.
+
 # Acceptance Criteria
 
 Each criterion tests the requirement with the same number. Unless a scenario says otherwise, it uses this data:
