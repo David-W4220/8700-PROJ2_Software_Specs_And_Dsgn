@@ -7,7 +7,7 @@ This project is a REST API skeleton for a commercial space station inventory and
 It uses Python and FastAPI. The current milestone defines module interfaces and API routes without implementing business logic. All API routes return HTTP 501 Not Implemented.
 
 ## Project Tree
-
+```
 project/
 ├── spec.md
 ├── architecture.md
@@ -34,7 +34,7 @@ project/
 └── tests/                       
     ├── __init__.py
     └── test_contracts.py     
-
+```
 ## Requirements
 
 - Python 3.10 or later
