@@ -82,7 +82,7 @@ def _ground_inventory_view() -> dict[str, Any]:
     return {
         "inventory": list_inventory(),
         "recent_updates": get_update_history(),
-        "synchronization": get_status(),
+        "sync_status": get_status(),
     }
 
 
