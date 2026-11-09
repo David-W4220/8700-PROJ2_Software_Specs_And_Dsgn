@@ -62,7 +62,7 @@ The public route-handler functions and their mappings are specified in Section 4
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `authenticate` | `authenticate(authorization: str) -> dict[str, Any]` | Returns the authenticated user, including `user_id` and `role`. | Missing or invalid authentication. | FR12, NFR4, AC16 |
+| `authenticate` | `authenticate(authorization: str \| None) -> dict[str, Any]` | Returns the authenticated user, including `user_id` and `role`. | Missing or invalid authentication. | FR12, NFR4, AC16 |
 | `authorize` | `authorize(user_id: str, action: str) -> None` | Returns normally when the user is authorized for the requested action. | User does not have permission. | FR12, NFR4, AC15–AC16 |
 
 **Injected dependencies:**
@@ -190,7 +190,6 @@ This module provides persistent access to station-side inventory, user, mission,
 | `list_pending_updates` | `list_pending_updates() -> list[dict[str, Any]]` | Returns updates awaiting synchronization. | Storage failure. | FR10, FR11 |
 | `mark_update_acknowledged` | `mark_update_acknowledged(update_id: str, acknowledged_at: datetime) -> None` | Marks the update as acknowledged. | Update not found or storage failure. | FR11, NFR2, AC14 |
 | `get_last_successful_sync_time` | `get_last_successful_sync_time() -> datetime \| None` | Returns the latest successful synchronization time, or `None` if no successful synchronization has occurred. | Storage failure. | FR7, FR10, AC10, AC13 |
-| `save_last_successful_sync_time` | `save_last_successful_sync_time(sync_time: datetime) -> None` | Saves the latest successful synchronization time. | Storage failure. | FR11, NFR3 |
 | `get_mission` | `get_mission(mission_id: str) -> dict[str, Any]` | Returns a stored mission. | Mission not found. | FR6, FR9 |
 | `save_mission` | `save_mission(mission: dict[str, Any]) -> dict[str, Any]` | Returns the saved mission. | Invalid mission or storage failure. | FR6, FR8, FR9 |
 | `get_manifest` | `get_manifest(mission_id: str) -> dict[str, Any]` | Returns the mission manifest. | Manifest not found. | FR6 |
@@ -198,9 +197,7 @@ This module provides persistent access to station-side inventory, user, mission,
 | `save_audit_record` | `save_audit_record(record: dict[str, Any]) -> dict[str, Any]` | Returns the saved audit record. | Storage failure. | FR12 |
 | `list_audit_records` | `list_audit_records(entity_id: str \| None = None, limit: int = 100) -> list[dict[str, Any]]` | Returns stored audit records. | Storage failure. | FR12, AC17 |
 | `save_sync_conflict` | `save_sync_conflict(conflict: dict[str, Any]) -> dict[str, Any]` | Saves a conflict record containing both competing values. | Storage failure. | FR11, AC15 |
-| `get_sync_conflict` | `get_sync_conflict(conflict_id: str) -> dict[str, Any]` | Returns a synchronization conflict by ID. | Conflict not found. | FR11, AC15 |
 | `list_sync_conflicts` | `list_sync_conflicts() -> list[dict[str, Any]]` | Returns unresolved synchronization conflicts. | Storage failure. | FR11, AC15 |
-| `resolve_sync_conflict` | `resolve_sync_conflict(conflict_id: str, selected_value: Any, audit_record: dict[str, Any]) -> dict[str, Any]` | Saves the selected value, marks the conflict resolved, and stores its audit record. | Conflict not found or storage failure. | FR11, FR12, AC15 |
 
 The storage module must preserve locally saved updates after application restarts. Pending updates must not be deleted until Earth acknowledges them.
 
@@ -216,12 +213,6 @@ A single accepted inventory change should persist its item, update, and audit in
 | `synchronize_pending_updates` | `synchronize_pending_updates() -> dict[str, Any]` | Returns acknowledged, failed, and conflicting updates. | Earth-side communication failure; failed updates remain pending. | FR11, NFR3, AC14, AC15 |
 | `list_conflicts` | `list_conflicts() -> list[dict[str, Any]]` | Returns conflicts requiring review. | Storage failure. | FR11, AC15 |
 | `resolve_conflict` | `resolve_conflict(conflict_id: str, selected_value: Any, reviewer_id: str, reason: str) -> dict[str, Any]` | Returns the resolved conflict and selected value. | Conflict not found, invalid resolution, or unauthorized operation. | FR11, FR12, AC15 |
-
-**Additional callback:**
-
-`on_connection_restored() -> None`
-
-This callback is invoked when the application detects that communication with Earth has returned. It initiates or schedules synchronization within the 60-second limit in NFR3.
 
 **Injected dependencies:**
 
