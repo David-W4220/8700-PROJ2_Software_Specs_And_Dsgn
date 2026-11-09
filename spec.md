@@ -321,3 +321,9 @@ Access to current inventory and mission records shall require authentication and
 Searching through 10,000 inventory records shall return results within 2 seconds in at least 95 out of 100 trials on the team's agreed test device.
 
 **Reason:** Crew members need to receive inventory information efficiently. This retains the measurable performance target from Project 1 and supports G1, FR1, and AC1.
+
+
+### NFR6 — Usability (Medium Priority)
+The system shall display clear item names and units. Warnings and error messages shall not rely on color alone to communicate information.
+
+**Reason:** Crew members need to understand inventory information and identify warnings and errors clearly. This preserves the usability requirement from Project 1 and supports G1, FR1, FR2, and FR4.
