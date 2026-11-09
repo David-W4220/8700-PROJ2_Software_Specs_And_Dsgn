@@ -6,6 +6,35 @@ This project is a REST API skeleton for a commercial space station inventory and
 
 It uses Python and FastAPI. The current milestone defines module interfaces and API routes without implementing business logic. All API routes return HTTP 501 Not Implemented.
 
+## Project Tree
+
+project/
+├── spec.md
+├── architecture.md
+├── test_plan.md
+├── contracts.md
+├── requirements.txt
+├── README.md
+│
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   │
+│   └── modules/
+│       ├── __init__.py
+│       ├── user_interface.py
+│       ├── authentication_authorization.py
+│       ├── inventory_management.py
+│       ├── resupply_planning.py
+│       ├── mission_shipment_management.py
+│       ├── audit_logging.py
+│       ├── local_data_storage.py
+│       └── synchronization.py
+│
+└── tests/                       
+    ├── __init__.py
+    └── test_contracts.py     
+
 ## Requirements
 
 - Python 3.10 or later
