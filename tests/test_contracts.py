@@ -1,11 +1,9 @@
-
 #Tests for the FastAPI skeleton to verify route registration 
 #and the required HTTP 501 response.
 
-import pytest
+import re, pytest
 from fastapi.testclient import TestClient
 from app.main import app
-
 
 client = TestClient(app)
 
@@ -96,11 +94,9 @@ API_CASES = [
 
 @pytest.mark.parametrize("method,path,body", API_CASES)
 def test_api_route_returns_501(method, path, body):
-    """Every unfinished API route must return the required 501 response."""
+    #Every unfinished API route must return the required 501 response
 
-    request_args = {
-        "headers": AUTH_HEADERS
-    }
+    request_args = {"headers": AUTH_HEADERS}
 
     if body is not None:
         request_args["json"] = body
@@ -112,7 +108,7 @@ def test_api_route_returns_501(method, path, body):
 
 
 def test_all_expected_api_operations_are_registered():
-    """Verify that all documented API operations appear in OpenAPI."""
+    #Verify that all documented API operations appear in OpenAPI
 
     openapi = client.get("/openapi.json").json()
 
@@ -123,9 +119,18 @@ def test_all_expected_api_operations_are_registered():
         if method.lower() in {"get", "post", "patch", "put", "delete"}
     }
 
+    # Helper to convert concrete test IDs into OpenAPI's parameter template format
+    def normalize_path(path: str) -> str:
+        path = path.split("?")[0]  # Strip query parameters
+        path = re.sub(r'/WTR-\d+', '/{item_id}', path)
+        path = re.sub(r'/M-\d+', '/{mission_id}', path)
+        path = re.sub(r'/C-\d+', '/{conflict_id}', path)
+        return path
+
     expected_operations = {
-        (method, path)
-        for method, path, _ in API_CASES
+        # Normalize concrete test paths to match OpenAPI's parameterized route structure
+        (param.values[0], normalize_path(param.values[1]))
+        for param in API_CASES
     }
 
     assert actual_operations == expected_operations
