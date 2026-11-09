@@ -1,23 +1,23 @@
-# Test Plan — Commercial Space Station Inventory and Resupply System
+# Test Plan — David Wang
 
 ## 1. Overview
 
-This document refines the acceptance criteria in `spec.md` into concrete test cases. It uses the BDD alternative from the assignment.
+This document refines the 17 acceptance criteria in `spec.md` into concrete test cases. It uses the BDD alternative from the assignment.
 
-Each test has a unique ID. Tests are grouped by their original acceptance criterion or by the additional requirement they cover.
+Each test has a unique ID. The original ACs are retained, with additional cases where needed to cover boundaries, controls, and nonfunctional requirements.
 
 ### Test conventions
 
 - `WTR-001` represents a water inventory item measured in packs.
-- Unless stated otherwise, `WTR-001` starts with 12 usable packs, a minimum stock level of 10, location `Store A`, and condition `Usable`.
-- Test users are authenticated users whose permissions are explicitly configured for each test. This avoids assuming an undefined role-permission mapping.
+- Unless stated otherwise, `WTR-001` starts with 12 usable packs, minimum stock of 10, location `Store A`, and condition `Usable`.
+- Test users are authenticated users with explicitly configured permissions. This avoids assuming a role-permission mapping that the specification has not defined.
 - A fixed test clock is used for timestamp checks.
-- Each test starts with an independent initial state unless otherwise stated.
-- For rejected requests, no accepted business update, submission, approval, dispatch, or resolution record should be created, and the relevant business state must remain unchanged.
+- Each test begins with an independent initial state unless stated otherwise.
+- A rejected operation must not create an accepted update, submission, approval, dispatch, receipt, or conflict-resolution record. The relevant business state must remain unchanged.
 
 ### Proposed HTTP status codes
 
-The requirements do not specify HTTP status codes. These are proposed for the FastAPI implementation and should be kept consistent in `contracts.md`.
+The specification does not define HTTP status codes. These are proposed for the FastAPI implementation and will be used consistently in `contracts.md`.
 
 | Result | Proposed status |
 |---|---:|
@@ -27,7 +27,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 | Operation not allowed in the current state | 409 |
 | Invalid input or capacity violation | 422 |
 
-**Important:** During this milestone, the skeleton routes will return HTTP 501 because they are not implemented. The tests below describe the expected behavior of the eventual implementation, not the temporary 501 skeleton response.
+**Skeleton note:** During this milestone, the FastAPI routes return HTTP 501 because their business logic is not implemented. The expected results below describe the eventual application behavior, not the temporary skeleton response.
 
 ---
 
@@ -40,18 +40,18 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Given `WTR-001` has 12 packs, location `Store A`, and condition `Usable`
 - When a crew member finds the item from the dashboard within three interactions
 - Then the system displays its ID, name, quantity, unit, location, and condition
-- Expected result: HTTP 200; returned quantity is 12, location is `Store A`, and condition is `Usable`
+- Expected result: item data is returned correctly; HTTP 200
 - Side effects: none
 
 **AT01-02 — Extra: Check the interaction limit outside the requirement**
 
-- Given `WTR-001` exists in the inventory
+- Given `WTR-001` exists in inventory
 - When a crew member needs four interactions from the dashboard to find it
 - Then the interface fails the three-interaction requirement
 - Expected result: usability requirement failure
 - Side effects: none
 
-*This is a user-interface test. An API test can check the returned item data but cannot verify the number of user interactions.*
+*These interaction-count tests require the user interface. An API test alone cannot verify the number of interactions.*
 
 ### AC2 — Record Usage and Flag Low Stock (FR2, FR4)
 
@@ -63,7 +63,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And the system displays a low-stock warning
 - And the accepted update records the user's identity and time
 - Expected result: HTTP 200; quantity = 9; low-stock warning = true
-- Side effects: one accepted inventory update and corresponding history entry
+- Side effects: one accepted inventory update and one history entry
 
 **AT02-02 — Extra: Quantity reaches the minimum stock level**
 
@@ -76,13 +76,13 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 
 **AT02-03 — Extra: List low-stock items and their importance**
 
-- Given `WTR-001` has 9 usable packs, a minimum stock level of 10, and importance `Critical`
-- And another item has 12 usable packs and a minimum stock level of 10
-- When a Logistics Planner requests the resupply needs
+- Given `WTR-001` has 9 usable packs, minimum stock of 10, and importance `Critical`
+- And another item has 12 usable packs and minimum stock of 10
+- When a Logistics Planner requests resupply needs
 - Then `WTR-001` appears as requiring replenishment
 - And its importance is displayed as `Critical`
 - And the other item is not identified as low-stock
-- Expected result: HTTP 200; returned low-stock item and importance match the starting data
+- Expected result: HTTP 200; returned items and importance match the starting data
 - Side effects: none
 
 ### AC3 — Reject Usage Above Available Quantity (FR2)
@@ -93,7 +93,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When a crew member records 5 packs used
 - Then the system rejects the request with a quantity validation error
 - And the available quantity remains 4 packs
-- Expected result: HTTP 422
+- Expected result: HTTP 422; error code `invalid_quantity`
 - Side effects: no accepted inventory update is created; quantity remains 4
 
 **AT03-02 — Control: Accept usage equal to available quantity**
@@ -105,15 +105,6 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Expected result: HTTP 200; quantity = 0
 - Side effects: one accepted inventory update
 
-**AT03-03 — Extra: Accept usage just below available quantity**
-
-- Given `WTR-001` has 4 usable packs
-- When a crew member records 3 packs used
-- Then the system accepts the request
-- And the remaining quantity becomes 1
-- Expected result: HTTP 200; quantity = 1
-- Side effects: one accepted inventory update
-
 ### AC4 — Reject a Negative Quantity (FR2)
 
 **AT04-01 — Reject a negative inventory quantity**
@@ -122,7 +113,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When a crew member attempts to set its quantity to -1
 - Then the system rejects the request
 - And the available quantity remains 4
-- Expected result: HTTP 422
+- Expected result: HTTP 422; error code `invalid_quantity`
 - Side effects: no accepted inventory update is created; quantity remains 4
 
 **AT04-02 — Control: Accept a quantity of zero**
@@ -145,15 +136,6 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Expected result: HTTP 200; quantity = 9; one corresponding history entry
 - Side effects: one accepted inventory update
 
-**AT05-02 — Extra: Apply the same validation to different crew members**
-
-- Given `WTR-001` has 4 usable packs
-- When Crew Member A attempts to record 5 packs used
-- And Crew Member B makes the same request using the same starting state
-- Then both requests are rejected by the same quantity validation rule
-- Expected result: HTTP 422 for both requests
-- Side effects: neither request creates an accepted update or changes the quantity
-
 ### AC6 — Enforce Cargo Weight Capacity (FR5)
 
 **AT06-01 — Reject the over-capacity cargo in AC6**
@@ -166,7 +148,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And rejects the submission
 - And the mission remains in Draft
 - Expected result: HTTP 422; calculated weight = 510 kg
-- Side effects: no submission or approval record is created; mission remains Draft
+- Side effects: no submission record is created; mission remains Draft
 
 **AT06-02 — Control: Accept cargo exactly at the weight limit**
 
@@ -176,10 +158,10 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the planner submits the mission
 - Then the system calculates 500 kg
 - And accepts the submission
-- Expected result: HTTP 200; calculated weight = 500 kg; mission status = Submitted
+- Expected result: HTTP 200; calculated weight = 500 kg; status = Submitted
 - Side effects: one submission is recorded
 
-**AT06-03 — Accept cargo just inside the weight limit**
+**AT06-03 — Extra: Accept cargo just inside the weight limit**
 
 - Given a mission has a weight limit of 500 kg
 - And its selected cargo already weighs 490 kg
@@ -190,7 +172,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Expected result: HTTP 200; calculated weight = 499 kg
 - Side effects: one submission is recorded
 
-**AT06-04 — Extra: Check the closest value outside the weight limit**
+**AT06-04 — Extra: Reject cargo just outside the weight limit**
 
 - Given a mission has a weight limit of 500 kg
 - And its selected cargo already weighs 490 kg
@@ -225,7 +207,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Expected result: HTTP 200; calculated volume = 100 L
 - Side effects: one submission is recorded
 
-**AT07-03 — Accept cargo just inside the volume limit**
+**AT07-03 — Extra: Accept cargo just inside the volume limit**
 
 - Given a mission has a volume limit of 100 L
 - And its selected cargo occupies 98 L
@@ -246,7 +228,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the planner submits the mission
 - Then the system identifies the missing unit weight
 - And rejects submission
-- Expected result: HTTP 422; error identifies missing unit weight
+- Expected result: HTTP 422; error code `missing_unit_weight`
 - Side effects: no submission record is created; mission remains Draft
 
 **AT08-02 — Control: Accept after unit weight is supplied**
@@ -256,7 +238,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the planner submits the mission
 - Then the system calculates 2 kg total weight and 2 L total volume
 - And accepts submission
-- Expected result: HTTP 200; calculated weight = 2 kg; volume = 2 L
+- Expected result: HTTP 200; weight = 2 kg; volume = 2 L
 - Side effects: one submission is recorded
 
 **AT08-03 — Reject submission when unit volume is missing**
@@ -267,7 +249,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the planner submits the mission
 - Then the system identifies the missing unit volume
 - And rejects submission
-- Expected result: HTTP 422; error identifies missing unit volume
+- Expected result: HTTP 422; error code `missing_unit_volume`
 - Side effects: no submission record is created; mission remains Draft
 
 **AT08-04 — Control: Accept after unit volume is supplied**
@@ -277,7 +259,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the planner submits the mission
 - Then the system calculates 2 kg total weight and 2 L total volume
 - And accepts submission
-- Expected result: HTTP 200; calculated weight = 2 kg; volume = 2 L
+- Expected result: HTTP 200; weight = 2 kg; volume = 2 L
 - Side effects: one submission is recorded
 
 ### AC9 — Reapprove an Edited Manifest (FR6)
@@ -288,8 +270,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the Logistics Planner changes a planned item quantity
 - Then the system saves the revised manifest
 - And returns the mission to Draft
-- And requires the revised manifest to be resubmitted and approved before dispatch
-- Expected result: HTTP 200; mission status = Draft; revised quantity is saved
+- And requires resubmission and reapproval before dispatch
+- Expected result: HTTP 200; status = Draft; revised quantity is saved
 - Side effects: manifest version is updated
 
 **AT09-02 — Reject dispatch before resubmission and reapproval**
@@ -298,8 +280,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When an authorized user attempts to dispatch it without resubmission and reapproval
 - Then the system rejects the dispatch operation
 - And the mission remains in Draft
-- Expected result: HTTP 409
-- Side effects: no dispatch record is created; mission status remains Draft
+- Expected result: HTTP 409; error code `invalid_mission_state`
+- Side effects: no dispatch record is created; mission remains Draft
 
 **AT09-03 — Control: Allow dispatch after resubmission and reapproval**
 
@@ -308,7 +290,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And an authorized user confirms dispatch
 - Then the system accepts the operations
 - And the mission progresses to Shipped
-- Expected result: HTTP 200 for each accepted operation; final status = Shipped
+- Expected result: HTTP 200 for each operation; final status = Shipped
 - Side effects: submission, approval, and dispatch are recorded
 
 **AT09-04 — Extra: Editing a submitted manifest before dispatch**
@@ -317,7 +299,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the Logistics Planner edits the manifest
 - Then the mission returns to Draft
 - And the edited manifest must be resubmitted and approved
-- Expected result: HTTP 200; mission status = Draft
+- Expected result: HTTP 200; status = Draft
 - Side effects: manifest version is updated
 
 ### AC10 — View Inventory Updates from Ground Control (FR7)
@@ -328,9 +310,9 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And the latest successful synchronization time is `2026-11-09T10:00:00-06:00`
 - And a recent inventory update exists
 - When Ground Mission Control opens the inventory view
-- Then the system displays the current inventory and recent updates
+- Then the system displays current inventory and recent updates
 - And shows the synchronization time as `2026-11-09T10:00:00-06:00`
-- Expected result: HTTP 200; returned quantity = 9; timestamp matches the supplied value
+- Expected result: HTTP 200; quantity = 9; timestamp matches the supplied value
 - Side effects: none
 
 ### AC11 — Identify a Loading Difference (FR8)
@@ -342,7 +324,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Then the system displays a difference of 2 packs
 - And allows the loading problem to be recorded
 - Expected result: HTTP 200; planned = 20; loaded = 18; difference = 2
-- Side effects: one loading discrepancy record is associated with the mission
+- Side effects: one loading discrepancy is recorded
 
 ### AC12 — Receive a Partial Shipment (FR9)
 
@@ -356,20 +338,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And the available quantity becomes 23 packs
 - And records a shortage of 2 packs
 - And changes the mission status to Received
-- Expected result: HTTP 200; inventory quantity = 23; shortage = 2; status = Received
-- Side effects: one receipt is recorded and 18 packs are added to inventory
-
-**AT12-02 — Extra: Record a full shipment receipt**
-
-- Given a Shipped mission lists 20 water packs
-- And station inventory initially contains 5 usable packs
-- When Station Inventory Crew confirms receipt of all 20 packs
-- Then the system adds 20 packs to inventory
-- And the available quantity becomes 25 packs
-- And records no shortage
-- And changes the mission status to Received
-- Expected result: HTTP 200; inventory quantity = 25; shortage = 0; status = Received
-- Side effects: one receipt is recorded
+- Expected result: HTTP 200; quantity = 23; shortage = 2; status = Received
+- Side effects: one receipt is recorded and 18 usable packs are added to inventory
 
 ### AC13 — Save Changes During a Communication Outage (FR10)
 
@@ -383,7 +353,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And the update remains pending synchronization
 - And the pending update count is 1
 - And the last successful synchronization time remains unchanged
-- Expected result: local quantity = 10; pending count = 1; timestamp remains `2026-11-09T10:00:00-06:00`
+- Expected result: quantity = 10; pending count = 1; timestamp remains `2026-11-09T10:00:00-06:00`
 - Side effects: one local inventory update and one pending synchronization update are stored
 
 ### AC14 — Do Not Apply a Duplicated Retry Update (FR11)
@@ -396,8 +366,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the station sends update `U101` again
 - Then Earth acknowledges the previously accepted update
 - And Earth inventory remains at 10 packs
-- Expected result: HTTP 200; acknowledgement indicates the update was already accepted; quantity = 10
-- Side effects: no second inventory deduction or duplicate accepted update
+- Expected result: HTTP 200; quantity = 10; acknowledgement indicates the update was already accepted
+- Side effects: no second deduction or duplicate accepted update
 
 **AT14-02 — Control: Accept a different update ID**
 
@@ -407,6 +377,14 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And inventory becomes 9 packs
 - Expected result: HTTP 200; quantity = 9
 - Side effects: `U102` is accepted once
+
+**AT14-03 — Extra: Generate unique IDs for separate updates**
+
+- Given two separate valid inventory updates are created
+- When the system assigns their update IDs
+- Then the two update IDs are different
+- Expected result: both update IDs are unique
+- Side effects: two distinct updates are recorded
 
 ### AC15 — Resolve a Synchronization Conflict (FR11, FR12)
 
@@ -418,8 +396,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the changes synchronize
 - Then the system identifies a conflict
 - And retains both `Store B` and `Store C` for review
-- Expected result: conflict is identified; both values are available
-- Side effects: neither competing value is silently discarded
+- Expected result: both competing values are available for review
+- Side effects: neither value is silently discarded
 
 **AT15-02 — Authorized reviewer resolves a conflict**
 
@@ -428,19 +406,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the reviewer selects `Store B` and enters the reason `Physical inventory confirms Store B`
 - Then the current location becomes `Store B`
 - And the audit record contains both competing values, selected value, reviewer, time, and reason
-- Expected result: HTTP 200; selected location = `Store B`; audit fields are present
+- Expected result: HTTP 200; selected location = `Store B`; required audit fields are present
 - Side effects: conflict is marked resolved and the resolution is audited
-
-**AT15-03 — Extra: Reject unauthorized conflict resolution**
-
-- Given a synchronization conflict exists
-- And the signed-in user is not authorized to resolve conflicts
-- When the user attempts to select `Store B` and enter a resolution reason
-- Then the system rejects the operation
-- And both conflicting values remain available for review
-- Expected result: HTTP 403
-- Side effects: no conflict resolution is created; neither value is discarded
-- Control: AT15-02 is the authorized version of the same operation
 
 ### AC16 — Deny Unauthorized Actions (FR12)
 
@@ -451,8 +418,8 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - When the user attempts to approve the mission
 - Then the system denies the operation
 - And the mission remains in Submitted status
-- Expected result: HTTP 403
-- Side effects: no approval record is created; mission status remains Submitted
+- Expected result: HTTP 403; error code `permission_denied`
+- Side effects: no approval record is created; status remains Submitted
 
 **AT16-02 — Control: Allow an authorized user to approve the mission**
 
@@ -464,6 +431,54 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - Expected result: HTTP 200; status = Approved
 - Side effects: one approval is recorded
 
+**AT16-03 — Extra: Reject an unauthorized inventory change**
+
+- Given a user is authenticated but does not have permission to change inventory
+- When the user submits a valid quantity update
+- Then the system rejects the operation
+- Expected result: HTTP 403
+- Side effects: no inventory update is created; quantity remains unchanged
+- Control: the same update is accepted when the user is explicitly granted permission
+
+**AT16-04 — Extra: Reject unauthorized dispatch**
+
+- Given a mission is Approved
+- And the user is authenticated but does not have permission to confirm dispatch
+- When the user attempts to confirm dispatch
+- Then the system rejects the operation
+- Expected result: HTTP 403
+- Side effects: no dispatch record is created; status remains Approved
+- Control: the same dispatch operation is accepted when the user is explicitly granted permission
+
+**AT16-05 — Extra: Reject unauthorized cargo receipt**
+
+- Given a mission is Shipped
+- And the user is authenticated but does not have permission to record cargo receipt
+- When the user submits a valid receipt
+- Then the system rejects the operation
+- Expected result: HTTP 403
+- Side effects: no receipt is created; inventory remains unchanged
+- Control: the same receipt operation is accepted when the user is explicitly granted permission
+
+**AT16-06 — Extra: Reject unauthenticated access**
+
+- Given a user has not authenticated
+- When the user requests current inventory records
+- Then the system denies access
+- Expected result: HTTP 401
+- Side effects: no protected inventory data is returned
+- Control: the same request succeeds with an authenticated user who has permission to view inventory
+
+**AT16-07 — Extra: Reject unauthorized conflict resolution**
+
+- Given a synchronization conflict exists
+- And the user is authenticated but is not authorized to resolve conflicts
+- When the user attempts to select a final value and provide a reason
+- Then the system rejects the operation
+- Expected result: HTTP 403
+- Side effects: no resolution is created; both conflicting values remain available
+- Control: AT15-02 is the authorized version of the same operation
+
 ### AC17 — Audit an Accepted Change (FR12)
 
 **AT17-01 — Record the user, time, and changed values**
@@ -473,7 +488,7 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 - And the test clock is set to `2026-11-09T10:30:00-06:00`
 - When `crew-01` changes the quantity from 4 to 6
 - Then the system records the accepted change
-- And the audit record contains user `crew-01`, the timestamp, the affected item, previous quantity 4, and new quantity 6
+- And the audit record contains user `crew-01`, the timestamp, affected item, previous quantity 4, and new quantity 6
 - Expected result: HTTP 200; audit fields match the supplied values
 - Side effects: one accepted inventory update and one corresponding audit record
 
@@ -481,76 +496,44 @@ The requirements do not specify HTTP status codes. These are proposed for the Fa
 
 ## 3. Additional Tests for Nonfunctional Requirements
 
-These tests are marked extra because they extend the acceptance scenarios using the NFRs in `spec.md`.
+### NFR1 and NFR2 — Offline Availability and Local Data Durability
 
-### NFR1 — Offline Availability
+**AT-X01 — Extra: View and update inventory offline, then preserve the update**
 
-**AT-X01 — Extra: View inventory while offline**
-
-- Given the station has a locally stored record for `WTR-001`
+- Given the station has a locally stored record for `WTR-001` with 12 usable packs
 - And communication with Earth is unavailable
-- When a crew member searches for `WTR-001`
-- Then the system returns the locally stored inventory information
-- Expected result: HTTP 200; item data matches local storage
-- Side effects: none
-
-### NFR2 — Local Data Durability
-
-**AT-X02 — Extra: Keep pending updates until acknowledgement**
-
-- Given an inventory update is saved locally and is pending synchronization
-- When the application restarts and a synchronization attempt fails
-- Then the update remains stored locally and pending
-- And when Earth later acknowledges the update, it is marked as synchronized
-- Expected result: update remains pending until acknowledgement
-- Side effects: failed synchronization does not delete the pending update
+- When a crew member searches for `WTR-001` and records 2 packs used
+- Then the local quantity becomes 10
+- And the system displays the updated local record
+- And the update is pending synchronization
+- When the application restarts
+- Then the quantity remains 10 and the update remains pending
+- Expected result: HTTP 200 for local operations; quantity = 10; pending count = 1
+- Side effects: the local update survives restart
 
 ### NFR3 — Synchronization Recovery
 
-**AT-X03 — Extra: Start synchronization within 60 seconds**
+**AT-X02 — Extra: Start synchronization within 60 seconds**
 
-- Given pending inventory updates exist
+- Given pending updates exist
 - And communication is restored at `10:00:00`
 - When the system detects the restored connection
-- Then it starts a synchronization attempt no later than `10:01:00`
+- Then it starts attempting synchronization no later than `10:01:00`
 - Expected result: synchronization starts within 60 seconds
+- Control/boundary: starting at `10:01:01` fails the requirement
 
-**AT-X04 — Extra: Check the timing limit outside the requirement**
-
-- Given pending inventory updates exist
-- And communication is restored at `10:00:00`
-- When the system does not start synchronization until `10:01:01`
-- Then it fails the NFR3 timing requirement
-- Expected result: synchronization timing requirement failure
-
-**AT-X05 — Extra: Keep failed synchronization updates pending**
+**AT-X03 — Extra: Keep failed synchronization updates pending**
 
 - Given a pending update is sent to Earth
 - And the synchronization attempt fails
 - When the system checks the pending update list
 - Then the failed update remains stored and pending
-- Expected result: update remains pending
-- Side effects: no pending update is deleted
+- Expected result: the update remains pending
+- Side effects: the failed update is not deleted
 
 ### NFR4 — Security
 
-**AT-X06 — Extra: Reject unauthenticated access**
-
-- Given a user has not authenticated
-- When the user requests current inventory records
-- Then the system denies access
-- Expected result: HTTP 401
-- Side effects: no protected inventory data is returned
-
-**AT-X07 — Extra: Control for authenticated access**
-
-- Given a user has authenticated and has permission to view inventory
-- When the user requests current inventory records
-- Then the system returns the permitted inventory information
-- Expected result: HTTP 200
-- Side effects: none
-
-**AT-X08 — Extra: Verify encryption at rest and in transit**
+**AT-X04 — Extra: Verify encryption at rest and in transit**
 
 - Given station and Earth inventory records are stored and transferred
 - When the storage and communication mechanisms are examined
@@ -558,50 +541,34 @@ These tests are marked extra because they extend the acceptance scenarios using 
 - And data transmitted between the station and Earth is encrypted
 - Expected result: protected records and communication payloads are not stored or transmitted as readable plaintext
 
-*The exact verification method depends on the storage and communication technologies selected for implementation.*
+*The exact verification method depends on the storage and communication technologies selected during implementation.*
 
 ### NFR5 — Search Performance
 
-**AT-X09 — Extra: Meet the inventory search performance requirement**
+**AT-X05 — Extra: Meet the inventory search performance requirement**
 
 - Given the system contains 10,000 inventory records
 - When 100 inventory searches are performed on the team's agreed test device
 - Then at least 95 searches return results within 2 seconds
 - Expected result: performance requirement passes
-
-**AT-X10 — Extra: Check performance below the required success rate**
-
-- Given the system contains 10,000 inventory records
-- When 100 inventory searches are performed and only 94 return results within 2 seconds
-- Then the system fails the NFR5 performance requirement
-- Expected result: performance requirement fails
+- Boundary/control: 95 searches within 2 seconds passes; only 94 within 2 seconds fails
 
 ### NFR6 — Usability
 
-**AT-X11 — Extra: Display clear item names, units, and warnings**
+**AT-X06 — Extra: Display clear item names, units, and warnings**
 
 - Given an item has a quantity and unit and is below its minimum stock level
 - When the item is displayed to a crew member
 - Then the item name and unit are clear
 - And the low-stock warning is communicated with text or another non-color-only indicator
-- Expected result: warning and item information are understandable without relying on color alone
+- Expected result: the warning and item information are understandable without relying on color alone
 - Side effects: none
 
-*This test requires the user interface. It cannot be verified by a REST API test alone.*
+*This requires a user-interface test and cannot be verified by a REST API test alone.*
 
----
+### FR9 — Shipment Tracking
 
-## 4. Additional Functional and Gap Tests
-
-**AT-X12 — Extra: Assign unique IDs to separate inventory updates (FR11, Domain Rules)**
-
-- Given two separate valid inventory updates are created
-- When the system assigns update IDs
-- Then the two IDs are different
-- Expected result: both update IDs are unique
-- Side effects: two distinct updates are recorded
-
-**AT-X13 — Extra: Return shipment status, expected arrival, and history (FR9)**
+**AT-X07 — Extra: Return shipment status, expected arrival, and history**
 
 - Given a resupply mission has a recorded status, expected arrival time, and status history
 - When Ground Mission Control requests the shipment details
@@ -609,45 +576,27 @@ These tests are marked extra because they extend the acceptance scenarios using 
 - Expected result: HTTP 200; returned fields match the stored mission data
 - Side effects: none
 
-**AT-X14 — Extra: Probe concurrent inventory updates (FR2, FR3, FR11)**
+---
 
-- Given two crew members read the same starting quantity for an inventory item
-- When both submit quantity updates before either sees the other's update
-- Then the test checks how the system handles the competing updates
-- Expected result: not defined by the current specification
-- Status: unresolved specification gap; do not automate as a pass/fail test until the expected concurrency behavior is defined
+## 4. Gap Checklist
 
-**AT-X15 — Extra: Probe unsupported quantity input types (FR2)**
-
-- Given an inventory item has 4 packs
-- When a crew member submits a fractional quantity or a non-numeric quantity
-- Then the system's expected handling must be clarified
-- Expected result: not defined by the current specification
-- Status: unresolved specification gap; do not automate until the accepted quantity types are defined
+- **Boundaries:** Covered for three interactions, minimum stock, available quantity, zero and negative quantities, cargo weight and volume, and synchronization timing.
+- **Time:** Update timestamps, last successful sync time, and the 60-second synchronization requirement are covered. Clock synchronization and timezone handling remain unspecified.
+- **Identity:** Authentication and permission checks are covered. The role-to-permission mapping remains unspecified.
+- **State:** Tests cover Draft, Submitted, Approved, Shipped, and Received where the specification defines behavior. Other transitions remain unclear.
+- **Concurrency:** Simultaneous updates to the same item have no defined expected behavior.
+- **Input types:** Fractional quantities, text, and null values have no defined expected behavior.
+- **Errors and precedence:** Individual rejection conditions are tested separately. The specification does not define which error takes precedence when multiple rules are violated at once.
+- **Listing:** Low-stock items and update history are covered. Sorting, filtering, and pagination are not specified.
+- **Returned data:** Tests check item details, quantities, location, condition, history, synchronization status, capacity totals, mission status, receipt information, conflict values, and audit details. Exact response structures are defined in `contracts.md`.
 
 ---
 
-## 5. Gap Checklist
-
-| Category | Coverage or unresolved issue |
-|---|---|
-| Boundaries | Tests cover the three-interaction limit, minimum stock threshold, available quantity, zero and negative quantities, weight and volume limits, and 60-second synchronization limit. |
-| Time | Tests cover update timestamps, last successful synchronization time, and synchronization recovery timing. Clock synchronization and timezone handling remain unspecified. |
-| Identity | Tests cover authenticated access and authorized/unauthorized operations. The role-to-permission mapping remains unspecified. |
-| State | Tests cover Draft, Submitted, Approved, Shipped, and Received where the specification defines behavior. Other transitions remain unclear. |
-| Concurrency | AT-X14 identifies the missing rule for simultaneous updates to the same inventory item. |
-| Input types | AT-X15 identifies missing rules for fractional, text, and other invalid quantity inputs. |
-| Errors and precedence | Tests isolate quantity, measurement, capacity, mission-state, and permission failures. The specification does not define which error takes precedence when one request violates multiple rules; no combined-invalid-input behavior is assumed. |
-| Listing | AT02-03 checks that low-stock results include the appropriate items and importance. Sorting, filtering, and pagination are not specified. |
-| Returned data | Tests check item details, quantities, location, condition, update history, synchronization time, capacity totals, mission status, shipment receipt, conflict values, and audit details. Exact JSON response structures will be defined in `contracts.md`. |
-
----
-
-## 6. Spec Gaps
+## 5. Spec Gaps
 
 ### Functional requirements without acceptance criteria
 
-None. Every functional requirement has at least one mapped acceptance criterion.
+None. Every functional requirement maps to at least one acceptance criterion.
 
 | Functional requirement | Acceptance criteria |
 |---|---|
@@ -668,13 +617,13 @@ None. Every functional requirement has at least one mapped acceptance criterion.
 
 None. AC1 through AC17 each map to at least one functional requirement.
 
-### Nonfunctional requirements without numbered acceptance criteria in spec.md
+### Nonfunctional requirements without separate numbered acceptance criteria
 
-NFR1 through NFR6 do not currently have separate numbered Gherkin acceptance criteria in `spec.md`. They are covered by the additional test cases in Sections 3 and 4 of this test plan.
+NFR1 through NFR6 do not have separate numbered Gherkin acceptance criteria in `spec.md`. They are covered by AT-X01 through AT-X06 in this test plan.
 
 ### Other unresolved specification issues
 
-1. **Role permissions (FR12):** The specification does not define which named roles can approve missions, confirm dispatch, receive cargo, or resolve synchronization conflicts. Tests use explicit permission settings rather than inventing a role-permission matrix.
+1. **Role permissions (FR12):** The specification does not define which named roles can approve missions, confirm dispatch, receive cargo, or resolve conflicts. Tests use explicit permission settings rather than inventing a role-permission matrix.
 
 2. **Earth-side interface (FR7, FR11):** The API, message format, acknowledgement format, and authentication mechanism between the station and Earth are not defined.
 
@@ -686,11 +635,11 @@ NFR1 through NFR6 do not currently have separate numbered Gherkin acceptance cri
 
 6. **Mission status transitions (FR6, FR9):** The mission statuses are listed, but not every permitted transition or cancellation condition is defined.
 
-7. **Duplicate shipment receipts (FR9, AC12):** AC12 says the received quantity is added once, but the specification does not define how repeated receipt submissions are detected or handled.
+7. **Duplicate shipment receipts (FR9, AC12):** AC12 says the received quantity is added once, but the specification does not define how repeated receipt submissions are identified or handled.
 
 8. **Damaged cargo (FR9):** The system must record damage, but it is not specified whether damaged quantities are included in inventory quantity, excluded from usable stock, or stored separately.
 
-9. **Audit details (FR12):** The requirement mentions user, time, reviewer, changed value, and reason, but does not clarify whether an ordinary inventory change requires a reason or whether reasons are only required for conflict resolution.
+9. **Audit details (FR12):** The requirement mentions the user, time, reviewer, changed value, and reason, but does not clarify whether an ordinary inventory change requires a reason or whether a reason is required only for conflict resolution.
 
 10. **Encryption details (NFR4):** Encryption at rest and in transit is required, but the technology, key management, and verification method are not defined.
 
@@ -700,4 +649,4 @@ NFR1 through NFR6 do not currently have separate numbered Gherkin acceptance cri
 
 13. **Performance environment (NFR5):** The team must agree on the test device and test conditions before the 10,000-record performance test can be reproduced.
 
-14. **User-interface interaction count (FR1):** FR1 requires finding an item within three interactions, but the specification does not define precisely what counts as one interaction. A backend API test cannot verify this by itself.
+14. **User-interface interaction count (FR1):** FR1 requires finding an item within three interactions, but the specification does not precisely define what counts as one interaction. A backend API test cannot verify this by itself.
