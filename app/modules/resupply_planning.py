@@ -1,4 +1,4 @@
-#Resupply planning interfaces
+#Resupply planning interfaces defines resupply-needs, cargo-capacity interfaces.
 from typing import Any
 
 def get_resupply_needs() -> list[dict[str, Any]]:
