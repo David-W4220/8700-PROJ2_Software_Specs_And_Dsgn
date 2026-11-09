@@ -4,28 +4,43 @@
 
 This document defines the public interfaces for the eight modules in `architecture.md` and the REST APIs exposed by the User Interface module.
 
-**Language/framework:** Python 3.11+ / FastAPI  
-**Testing framework:** pytest  
-**Request/response data:** JSON
+- **Language/framework:** Python 3.11+ / FastAPI
+- **Testing framework:** pytest
+- **Request/response format:** JSON
 
-All business-operation functions are interface stubs during this milestone. Their bodies raise `NotImplementedError`. REST routes catch this exception and return HTTP 501.
+All business-operation functions are interface stubs during this milestone. Their bodies raise `NotImplementedError`. Each REST route catches this exception and returns HTTP 501.
 
 ## 2. Shared Data Structures
 
-The following structures describe the data exchanged between modules. They use the objects already defined in the Domain Model of `spec.md`; they do not introduce additional business modules.
+These structures describe the data exchanged between modules. They use the objects defined in the Domain Model of `spec.md`.
 
-| Data structure | Main fields |
+| Structure | Main fields |
 |---|---|
 | User | `user_id`, `role` |
 | InventoryItem | `item_id`, `name`, `unit`, `quantity`, `condition`, `location`, `expiration_date`, `unit_weight`, `unit_volume`, `minimum_stock`, `importance` |
-| InventoryUpdate | `update_id`, `item_id`, `change_details`, `user_id`, `timestamp` |
+| InventoryUpdate | `update_id`, `item_id`, `change_details`, `user_id`, `timestamp`, `sync_status` |
 | CargoLine | `item_id`, `quantity` |
-| ResupplyMission | `mission_id`, `status`, `weight_limit`, `volume_limit`, `expected_arrival` |
+| ResupplyMission | `mission_id`, `status`, `weight_limit`, `volume_limit`, `expected_arrival`, `status_history` |
 | CargoManifest | `mission_id`, `version`, `status`, `cargo_lines` |
 | ManifestLine | `item_id`, `planned_quantity`, `loaded_quantity`, `received_quantity` |
 | AuditRecord | `user_id`, `action`, `entity_id`, `previous_values`, `new_values`, `timestamp`, `reviewer_id`, `reason` |
 
-For the Python interfaces, these structures are represented as `dict[str, Any]` and lists of dictionaries. Exact validation models can be added when the implementation is developed.
+For Python interfaces, these structures are represented using `dict[str, Any]` and lists of dictionaries. API request bodies use typed request models.
+
+### API Request Models
+
+| Model | Fields |
+|---|---|
+| QuantityRequest | `quantity: float` |
+| UsageRequest | `quantity_used: float` |
+| CargoLineRequest | `item_id: str`, `quantity: float` |
+| CargoLinesRequest | `cargo_lines: list[CargoLineRequest]` |
+| LoadingRequest | `item_id: str`, `loaded_quantity: float` |
+| ReceiptLineRequest | `item_id: str`, `received_quantity: float`, `damaged_quantity: float \| None` |
+| ReceiptRequest | `received_lines: list[ReceiptLineRequest]` |
+| ConflictResolutionRequest | `selected_value: Any`, `reason: str` |
+
+Fractional inventory quantities and the handling of damaged quantities remain specification issues. The request models do not establish additional business rules for them.
 
 ## 3. Module Interfaces
 
@@ -33,9 +48,13 @@ For the Python interfaces, these structures are represented as `dict[str, Any]` 
 
 **Responsibility:** Provides role-specific views and exposes the REST API routes listed in Section 4.
 
-The module contains FastAPI route handlers. It delegates operations to the other seven modules and converts `NotImplementedError` from an unfinished module operation into the required HTTP 501 response.
+The module contains the FastAPI route handlers. Each handler authenticates the request, calls the appropriate module functions, and returns the corresponding JSON response.
 
 It does not implement inventory, mission, permission, audit, storage, or synchronization business rules.
+
+The public route-handler functions and their mappings are specified in Section 4.
+
+**Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Mission and Shipment Management, Synchronization, Audit Logging, and the external Earth-side system where required.
 
 ### 3.2 Authentication and Authorization
 
@@ -43,81 +62,99 @@ It does not implement inventory, mission, permission, audit, storage, or synchro
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `authenticate` | `authenticate(authorization: str \| None) -> dict[str, Any]` | Returns the authenticated user, including `user_id` and `role`. | HTTP 401 if authentication is missing or invalid. | FR12, NFR4, AC16 |
-| `authorize` | `authorize(user_id: str, action: str) -> None` | Returns normally when the user is authorized for the requested action. | HTTP 403 if the user lacks permission. | FR12, AC15, AC16 |
+| `authenticate` | `authenticate(authorization: str) -> dict[str, Any]` | Returns the authenticated user, including `user_id` and `role`. | Missing or invalid authentication. | FR12, NFR4, AC16 |
+| `authorize` | `authorize(user_id: str, action: str) -> None` | Returns normally when the user is authorized for the requested action. | User does not have permission. | FR12, NFR4, AC15–AC16 |
 
-**Injected dependency:** Local Data Storage to retrieve user information.
+**Injected dependencies:**
 
-The exact authentication mechanism and mapping from roles to permissions are not specified yet. The interface does not assume a particular authentication library or role-permission matrix.
+- Local Data Storage to retrieve user information.
+- The authentication verifier used by the application.
+- A permission policy that determines whether a user can perform a particular action.
+
+The exact authentication mechanism and role-to-permission mapping are not specified. The implementation must not assume that every user with the same role automatically has every permission.
 
 ### 3.3 Inventory Management
 
-**Dependencies:** Authentication and Authorization, Local Data Storage, Audit Logging
+**Dependencies:** Authentication and Authorization, Local Data Storage, Audit Logging.
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `find_item` | `find_item(item_id: str) -> dict[str, Any]` | Returns the item and its current quantity, unit, location, and condition. | Not found. | FR1, AC1 |
-| `set_quantity` | `set_quantity(item_id: str, quantity: float, user_id: str) -> dict[str, Any]` | Returns the updated item and accepted update record. | Not found, invalid negative quantity, or unauthorized operation. | FR2, FR3, FR12, AC4, AC5, AC17 |
-| `record_usage` | `record_usage(item_id: str, quantity_used: float, user_id: str) -> dict[str, Any]` | Returns the updated item and accepted update record. | Not found, usage above available usable quantity, or unauthorized operation. | FR2, FR3, FR10, AC2, AC3, AC5, AC13 |
-| `get_update_history` | `get_update_history(item_id: str \| None = None, limit: int = 20) -> list[dict[str, Any]]` | Returns recent updates for an item, or recent updates across inventory if `item_id` is omitted. | Not found if a specified item does not exist. | FR3, FR7, AC5, AC10 |
+| `find_item` | `find_item(item_id: str) -> dict[str, Any]` | Returns the item and its current quantity, unit, location, and condition. | Item not found. | FR1, AC1 |
+| `set_quantity` | `set_quantity(item_id: str, quantity: float, user_id: str) -> dict[str, Any]` | Returns the updated item and accepted update record. | Item not found or invalid negative quantity. | FR2, FR3, FR12, AC4, AC5, AC17 |
+| `record_usage` | `record_usage(item_id: str, quantity_used: float, user_id: str) -> dict[str, Any]` | Returns the updated item, accepted update record, and low-stock status. | Item not found, negative usage, or usage above available usable quantity. | FR2, FR3, FR4, FR12, AC2–AC5, AC13, AC17 |
+| `get_update_history` | `get_update_history(item_id: str \| None = None, limit: int = 20) -> list[dict[str, Any]]` | Returns recent updates for an item, or across inventory if `item_id` is omitted. | Storage failure. | FR3, FR7, AC5, AC10 |
 | `list_inventory` | `list_inventory() -> list[dict[str, Any]]` | Returns current inventory records. | Storage failure. | FR7, AC10 |
-| `add_received_quantity` | `add_received_quantity(item_id: str, received_quantity: float, user_id: str) -> dict[str, Any]` | Returns the updated inventory item after recording received quantity. | Not found, invalid quantity, or unauthorized operation. | FR9, AC12 |
+| `add_received_quantity` | `add_received_quantity(item_id: str, received_quantity: float, user_id: str) -> dict[str, Any]` | Returns the updated inventory item after recording received quantity. | Item not found or invalid quantity. | FR9, FR12, AC12 |
 
 **Injected dependencies:**
 
 - Authentication and Authorization for protected inventory changes.
 - Local Data Storage for retrieving and saving inventory and update records.
-- Audit Logging for recording accepted changes.
+- Audit Logging for creating audit records.
+- A clock for generating timestamps.
+- An ID generator for assigning unique update IDs.
 
-The quantity parameter uses a numeric Python type. Whether fractional inventory quantities are allowed remains an unresolved specification issue.
+An accepted inventory change must save the updated item, update history, audit information, and pending synchronization record locally before reporting success. These related records should be saved together.
 
 ### 3.4 Resupply Planning
 
-**Dependencies:** Authentication and Authorization, Inventory Management, Local Data Storage
+**Dependencies:** Authentication and Authorization, Inventory Management, Local Data Storage.
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `get_resupply_needs` | `get_resupply_needs() -> list[dict[str, Any]]` | Returns items below minimum stock with their importance. | Storage failure. | FR4, AC2 |
-| `check_capacity` | `check_capacity(mission_id: str, cargo_lines: list[dict[str, Any]]) -> dict[str, Any]` | Returns total cargo weight, total volume, and whether both limits are satisfied. | Mission or item not found, missing measurement, or capacity exceeded. | FR5, AC6, AC7, AC8 |
+| `get_resupply_needs` | `get_resupply_needs() -> list[dict[str, Any]]` | Returns items below their minimum usable stock levels, including their importance. | Storage failure. | FR4, AC2 |
+| `check_capacity` | `check_capacity(mission_id: str, cargo_lines: list[dict[str, Any]]) -> dict[str, Any]` | Returns total cargo weight, total volume, and whether each capacity limit is satisfied. | Mission or item not found, or invalid request data. | FR5, AC6–AC8 |
 
-Each `cargo_lines` entry contains an `item_id` and selected `quantity`.
+Each `cargo_lines` entry contains `item_id` and `quantity`.
+
+The capacity-check result should include:
+
+- `total_weight`
+- `total_volume`
+- `within_weight_capacity`
+- `within_volume_capacity`
+- `can_submit`
+- `errors`
+
+An over-capacity result is returned as a capacity-check result. The actual submission operation must reject a mission that exceeds either capacity.
 
 **Injected dependencies:**
 
 - Inventory Management for item details and unit measurements.
 - Local Data Storage for mission capacity information.
-- Authentication and Authorization for protected planning operations.
-
-Capacity validation must check both weight and volume. A mission cannot be submitted if either exceeds its limit or a required measurement is missing.
+- Authentication and Authorization for protected operations.
 
 ### 3.5 Mission and Shipment Management
 
-**Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Local Data Storage, Audit Logging
+**Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Local Data Storage, Audit Logging.
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `create_manifest` | `create_manifest(mission_id: str, cargo_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns the created manifest and its version. | Mission not found or unauthorized operation. | FR6 |
-| `update_manifest` | `update_manifest(mission_id: str, cargo_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns the updated manifest and version. | Mission not found, invalid mission state, or unauthorized operation. | FR6, AC9 |
-| `submit_manifest` | `submit_manifest(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the submitted mission and status. | Mission not found, missing measurement, capacity exceeded, or invalid mission state. | FR5, FR6, AC6, AC7, AC8, AC9 |
-| `approve_mission` | `approve_mission(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the approved mission. | Mission not found, invalid mission state, or unauthorized operation. | FR6, FR12, AC9, AC16 |
-| `confirm_dispatch` | `confirm_dispatch(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the dispatched mission. | Mission not found, invalid mission state, or unauthorized operation. | FR6, FR12, AC9 |
-| `record_loading` | `record_loading(mission_id: str, item_id: str, loaded_quantity: float, user_id: str) -> dict[str, Any]` | Returns planned quantity, loaded quantity, and any difference. | Mission or item not found, invalid quantity, or unauthorized operation. | FR8, AC11 |
-| `get_mission` | `get_mission(mission_id: str) -> dict[str, Any]` | Returns mission status, expected arrival, manifest information, and status history. | Mission not found. | FR9, AC12 |
-| `record_shipment_receipt` | `record_shipment_receipt(mission_id: str, received_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns receipt information, shortage information, and updated mission status. | Mission or item not found, invalid mission state, or unauthorized operation. | FR9, FR12, AC12 |
+| `create_manifest` | `create_manifest(mission_id: str, cargo_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns the created manifest and its version. | Mission not found or invalid mission state. | FR6 |
+| `update_manifest` | `update_manifest(mission_id: str, cargo_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns the updated manifest and mission status. | Mission not found or invalid mission state. | FR6, AC9 |
+| `submit_manifest` | `submit_manifest(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the submitted mission and status. | Mission not found, missing measurement, capacity exceeded, or invalid mission state. | FR5, FR6, AC6–AC9 |
+| `approve_mission` | `approve_mission(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the approved mission. | Mission not found or invalid mission state. | FR6, FR12, AC9, AC16 |
+| `confirm_dispatch` | `confirm_dispatch(mission_id: str, user_id: str) -> dict[str, Any]` | Returns the dispatched mission. | Mission not found or invalid mission state. | FR6, FR12, AC9 |
+| `record_loading` | `record_loading(mission_id: str, item_id: str, loaded_quantity: float, user_id: str) -> dict[str, Any]` | Returns planned quantity, loaded quantity, and their difference. | Mission or item not found, or invalid mission state. | FR8, AC11 |
+| `get_mission` | `get_mission(mission_id: str) -> dict[str, Any]` | Returns mission status, expected arrival, manifest information, and status history. | Mission not found. | FR9 |
+| `record_shipment_receipt` | `record_shipment_receipt(mission_id: str, received_lines: list[dict[str, Any]], user_id: str) -> dict[str, Any]` | Returns receipt information, shortages, damages, updated inventory information, and mission status. | Mission or item not found, or invalid mission state. | FR9, FR12, AC12 |
 
 Each `cargo_lines` entry contains `item_id` and `quantity`.
 
-Each `received_lines` entry contains `item_id` and `received_quantity`. An optional `damaged_quantity` field may be recorded when damage is reported, but how damaged quantities affect usable inventory remains unresolved.
+Each `received_lines` entry contains `item_id` and `received_quantity`. An optional `damaged_quantity` field may be recorded when cargo damage is reported.
+
+The specification does not yet define whether damaged quantities should be included in usable inventory or stored separately. This must be clarified before that behavior is implemented.
+
+The manifest functions operate on an existing mission. Creating a new resupply mission is not currently covered by a functional requirement.
 
 **Injected dependencies:**
 
 - Authentication and Authorization for protected mission operations.
 - Inventory Management for inventory updates when cargo is received.
 - Resupply Planning for capacity validation before submission.
-- Local Data Storage for missions and manifests.
+- Local Data Storage for mission and manifest records.
 - Audit Logging for accepted mission and shipment operations.
-
-An existing Draft mission is assumed when creating its manifest. Creating new missions is not currently covered by a functional requirement.
+- A clock for timestamps where required.
 
 ### 3.6 Audit Logging
 
@@ -125,65 +162,83 @@ An existing Draft mission is assumed when creating its manifest. Creating new mi
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `record_event` | `record_event(user_id: str, action: str, entity_type: str, entity_id: str, previous_values: dict[str, Any] \| None, new_values: dict[str, Any], reviewer_id: str \| None = None, reason: str \| None = None) -> dict[str, Any]` | Returns the saved audit record. | Storage failure. | FR2, FR12, AC15, AC17 |
+| `record_event` | `record_event(user_id: str, action: str, entity_type: str, entity_id: str, previous_values: dict[str, Any] \| None, new_values: dict[str, Any], reviewer_id: str \| None = None, reason: str \| None = None) -> dict[str, Any]` | Returns a timestamped audit record for persistence. | Storage failure. | FR2, FR12, AC15, AC17 |
 | `list_records` | `list_records(entity_id: str \| None = None, limit: int = 100) -> list[dict[str, Any]]` | Returns audit records, optionally filtered by entity. | Storage failure. | FR12, AC17 |
 
-**Injected dependency:** Local Data Storage for persistent audit records.
+**Injected dependencies:**
+
+- Local Data Storage for persistent audit records.
+- A clock for generating timestamps.
+
+Conflict resolution must record both competing values, the selected value, the reviewer, timestamp, and reason. The specification does not clearly establish whether ordinary inventory updates also require a reason.
 
 ### 3.7 Local Data Storage
 
-**Dependencies:** None
+**Dependencies:** None.
 
 This module provides persistent access to station-side inventory, user, mission, manifest, audit, and synchronization records.
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
-| `get_user` | `get_user(user_id: str) -> dict[str, Any]` | Returns a user record. | Not found. | FR12 |
-| `get_inventory_item` | `get_inventory_item(item_id: str) -> dict[str, Any]` | Returns an inventory item. | Not found. | FR1, FR2 |
+| `get_user` | `get_user(user_id: str) -> dict[str, Any]` | Returns a user record. | User not found. | FR12, NFR4 |
+| `get_inventory_item` | `get_inventory_item(item_id: str) -> dict[str, Any]` | Returns an inventory item. | Item not found. | FR1, FR2 |
 | `list_inventory_items` | `list_inventory_items() -> list[dict[str, Any]]` | Returns stored inventory items. | Storage failure. | FR4, FR7 |
 | `save_inventory_item` | `save_inventory_item(item: dict[str, Any]) -> dict[str, Any]` | Returns the saved inventory item. | Invalid record or storage failure. | FR2, FR9, FR10 |
 | `save_inventory_update` | `save_inventory_update(update: dict[str, Any]) -> dict[str, Any]` | Returns the saved update record. | Duplicate update ID or storage failure. | FR2, FR10, FR11 |
+| `get_inventory_update` | `get_inventory_update(update_id: str) -> dict[str, Any]` | Returns an inventory update by ID. | Update not found. | FR11, AC14 |
 | `list_inventory_updates` | `list_inventory_updates(item_id: str \| None = None, limit: int = 20) -> list[dict[str, Any]]` | Returns stored update history. | Storage failure. | FR3, FR7 |
-| `list_pending_updates` | `list_pending_updates() -> list[dict[str, Any]]` | Returns all updates awaiting synchronization. | Storage failure. | FR10, FR11 |
+| `list_pending_updates` | `list_pending_updates() -> list[dict[str, Any]]` | Returns updates awaiting synchronization. | Storage failure. | FR10, FR11 |
 | `mark_update_acknowledged` | `mark_update_acknowledged(update_id: str, acknowledged_at: datetime) -> None` | Marks the update as acknowledged. | Update not found or storage failure. | FR11, NFR2, AC14 |
-| `get_last_successful_sync_time` | `get_last_successful_sync_time() -> datetime \| None` | Returns the latest successful synchronization time, or `None` if no successful sync has occurred. | Storage failure. | FR7, FR10, AC10, AC13 |
-| `get_mission` | `get_mission(mission_id: str) -> dict[str, Any]` | Returns a stored mission. | Not found. | FR6, FR9 |
-| `save_mission` | `save_mission(mission: dict[str, Any]) -> dict[str, Any]` | Returns the saved mission. | Invalid state or storage failure. | FR6, FR8, FR9 |
-| `get_manifest` | `get_manifest(mission_id: str) -> dict[str, Any]` | Returns the mission manifest. | Not found. | FR6 |
+| `get_last_successful_sync_time` | `get_last_successful_sync_time() -> datetime \| None` | Returns the latest successful synchronization time, or `None` if no successful synchronization has occurred. | Storage failure. | FR7, FR10, AC10, AC13 |
+| `save_last_successful_sync_time` | `save_last_successful_sync_time(sync_time: datetime) -> None` | Saves the latest successful synchronization time. | Storage failure. | FR11, NFR3 |
+| `get_mission` | `get_mission(mission_id: str) -> dict[str, Any]` | Returns a stored mission. | Mission not found. | FR6, FR9 |
+| `save_mission` | `save_mission(mission: dict[str, Any]) -> dict[str, Any]` | Returns the saved mission. | Invalid mission or storage failure. | FR6, FR8, FR9 |
+| `get_manifest` | `get_manifest(mission_id: str) -> dict[str, Any]` | Returns the mission manifest. | Manifest not found. | FR6 |
 | `save_manifest` | `save_manifest(manifest: dict[str, Any]) -> dict[str, Any]` | Returns the saved manifest. | Invalid manifest or storage failure. | FR6 |
 | `save_audit_record` | `save_audit_record(record: dict[str, Any]) -> dict[str, Any]` | Returns the saved audit record. | Storage failure. | FR12 |
-| `list_audit_records` | `list_audit_records(entity_id: str \| None = None, limit: int = 100) -> list[dict[str, Any]]` | Returns stored audit records. | Storage failure. | FR12 |
-| `save_sync_conflict` | `save_sync_conflict(conflict: dict[str, Any]) -> dict[str, Any]` | Returns the saved conflict record containing both versions. | Storage failure. | FR11, AC15 |
+| `list_audit_records` | `list_audit_records(entity_id: str \| None = None, limit: int = 100) -> list[dict[str, Any]]` | Returns stored audit records. | Storage failure. | FR12, AC17 |
+| `save_sync_conflict` | `save_sync_conflict(conflict: dict[str, Any]) -> dict[str, Any]` | Saves a conflict record containing both competing values. | Storage failure. | FR11, AC15 |
+| `get_sync_conflict` | `get_sync_conflict(conflict_id: str) -> dict[str, Any]` | Returns a synchronization conflict by ID. | Conflict not found. | FR11, AC15 |
 | `list_sync_conflicts` | `list_sync_conflicts() -> list[dict[str, Any]]` | Returns unresolved synchronization conflicts. | Storage failure. | FR11, AC15 |
+| `resolve_sync_conflict` | `resolve_sync_conflict(conflict_id: str, selected_value: Any, audit_record: dict[str, Any]) -> dict[str, Any]` | Saves the selected value, marks the conflict resolved, and stores its audit record. | Conflict not found or storage failure. | FR11, FR12, AC15 |
 
-The storage module is responsible for persistent local saves. An accepted offline inventory update and its pending synchronization record must be stored before the application reports success.
+The storage module must preserve locally saved updates after application restarts. Pending updates must not be deleted until Earth acknowledges them.
+
+A single accepted inventory change should persist its item, update, and audit information together. The transaction handling is internal to Local Data Storage and does not require another architecture module.
 
 ### 3.8 Synchronization
 
-**Dependencies:** Local Data Storage, Audit Logging, Earth-side system (external)
+**Dependencies:** Local Data Storage, Audit Logging, external Earth-side system.
 
 | Public function | Signature | Success result | Failure | Spec rules served |
 |---|---|---|---|---|
 | `get_status` | `get_status() -> dict[str, Any]` | Returns pending update count and last successful synchronization time. | Storage failure. | FR7, FR10, AC10, AC13 |
-| `synchronize_pending_updates` | `synchronize_pending_updates() -> dict[str, Any]` | Returns synchronization results, including acknowledged, failed, and conflicting updates. | Earth-side communication failure; failed updates remain pending. | FR11, NFR3, AC14, AC15 |
+| `synchronize_pending_updates` | `synchronize_pending_updates() -> dict[str, Any]` | Returns acknowledged, failed, and conflicting updates. | Earth-side communication failure; failed updates remain pending. | FR11, NFR3, AC14, AC15 |
 | `list_conflicts` | `list_conflicts() -> list[dict[str, Any]]` | Returns conflicts requiring review. | Storage failure. | FR11, AC15 |
-| `resolve_conflict` | `resolve_conflict(conflict_id: str, selected_value: str, reviewer_id: str, reason: str) -> dict[str, Any]` | Returns the resolved conflict and selected value. | Conflict not found, invalid resolution, or unauthorized operation. | FR11, FR12, AC15 |
+| `resolve_conflict` | `resolve_conflict(conflict_id: str, selected_value: Any, reviewer_id: str, reason: str) -> dict[str, Any]` | Returns the resolved conflict and selected value. | Conflict not found, invalid resolution, or unauthorized operation. | FR11, FR12, AC15 |
+
+**Additional callback:**
+
+`on_connection_restored() -> None`
+
+This callback is invoked when the application detects that communication with Earth has returned. It initiates or schedules synchronization within the 60-second limit in NFR3.
 
 **Injected dependencies:**
 
-- Local Data Storage for pending updates, acknowledgements, conflict records, and last successful synchronization time.
+- Local Data Storage for pending updates, acknowledgements, conflicts, and synchronization timestamps.
 - Audit Logging for conflict-resolution records.
-- Earth-side system integration for sending updates and receiving acknowledgements.
+- The external Earth-side system for sending updates and receiving acknowledgements.
+- A clock and scheduler for synchronization timing.
 
-The Earth-side system remains external. Its implementation and exact API are not part of this skeleton.
-
----
+The Earth-side system remains external. Its implementation and exact API are not part of this skeleton. The conflict detection and comparison rules remain to be defined.
 
 ## 4. REST API Contracts
 
-The following REST APIs are exposed through the User Interface module. Authenticated user identity is obtained from the authorization context, not trusted from request-body `user_id` fields.
+The following REST APIs are exposed through the User Interface module.
 
-All routes require authentication. Protected write operations also require authorization for their specific action.
+All routes require an `Authorization` header. Authenticated user identity is obtained from the authorization context, not trusted from request-body `user_id` fields.
+
+Protected write operations must also pass the corresponding authorization check.
 
 | Requirement | Method and route | Request body / parameters | Public function mapping |
 |---|---|---|---|
@@ -208,9 +263,33 @@ All routes require authentication. Protected write operations also require autho
 | FR11, FR12 | `POST /sync/conflicts/{conflict_id}/resolution` | `{"selected_value": "Store B", "reason": "Physical inventory confirms Store B"}` | `Synchronization.resolve_conflict` |
 | FR12 | `GET /audit/records` | Optional query: `entity_id`, `limit` | `AuditLogging.list_records` |
 
-### REST API notes
+### API Response Fields
 
-1. FR10 does not need a separate endpoint for creating an offline inventory change. The existing quantity and usage endpoints perform the local inventory operation. The station stores the update locally, and `GET /sync/status` exposes pending count and last successful synchronization time.
+The following response structures are proposed so that the API results can be tested consistently.
+
+| Endpoint | Successful response fields |
+|---|---|
+| `GET /inventory/{item_id}` | `item` |
+| `PATCH /inventory/{item_id}/quantity` | `item`, `update` |
+| `POST /inventory/{item_id}/usage` | `item`, `update`, `low_stock` |
+| `GET /inventory/{item_id}/updates` | `updates` |
+| `GET /resupply/needs` | `items` |
+| `POST /missions/{mission_id}/capacity-check` | `mission_id`, `total_weight`, `total_volume`, `within_weight_capacity`, `within_volume_capacity`, `can_submit`, `errors` |
+| Manifest creation and update | `manifest`, `mission_status` |
+| Mission submission, approval, and dispatch | `mission` |
+| `GET /ground/inventory` | `inventory`, `recent_updates`, `sync_status` |
+| `POST /missions/{mission_id}/loading` | `mission_id`, `item_id`, `planned_quantity`, `loaded_quantity`, `difference` |
+| `GET /missions/{mission_id}` | `mission` |
+| `POST /missions/{mission_id}/receipt` | `mission`, `received_lines`, `shortages`, `damages` |
+| `GET /sync/status` | `pending_update_count`, `last_successful_sync_time` |
+| `POST /sync` | `acknowledged`, `failed`, `conflicts`, `pending_update_count`, `last_successful_sync_time` |
+| `GET /sync/conflicts` | `conflicts` |
+| Conflict resolution | `conflict`, `audit_record` |
+| `GET /audit/records` | `records` |
+
+### REST API Notes
+
+1. FR10 does not need a separate endpoint for creating an offline inventory change. The existing quantity and usage endpoints perform the local inventory operation. The station stores the update locally, and `GET /sync/status` exposes the pending count and last successful synchronization time.
 
 2. FR7's Ground Mission Control view combines inventory records, recent updates, and synchronization status from the corresponding public functions.
 
@@ -220,13 +299,15 @@ All routes require authentication. Protected write operations also require autho
 
 5. The REST APIs do not create a new Earth-side module. Synchronization communicates with the external Earth-side system through the dependency listed in the Synchronization module.
 
-6. NFR1–NFR6 are quality requirements and do not each require a separate REST endpoint. They apply to the relevant operations and application behavior.
+6. NFR1–NFR6 are quality requirements and do not each require a separate REST endpoint.
 
----
+7. The manifest routes assume that the corresponding Draft mission already exists. Creating a new mission is not currently defined by a functional requirement.
+
+8. Updating item location, condition, or missing-item status is mentioned in the Domain Model and actor descriptions, but there are no corresponding functional requirements or REST routes in the current specification. These operations are not added here.
 
 ## 5. HTTP Response Contracts
 
-These are the proposed API response conventions.
+The following HTTP status codes are proposed API conventions. The original specification does not prescribe HTTP status codes.
 
 | Situation | HTTP status | Error code |
 |---|---:|---|
@@ -242,7 +323,7 @@ These are the proposed API response conventions.
 | Earth-side communication is unavailable | 503 | `earth_unavailable` |
 | Operation has not been implemented in this milestone | 501 | `not_implemented` |
 
-A normal API error response has this general structure:
+A normal API error response uses this structure:
 
 ```json
 {
@@ -251,9 +332,9 @@ A normal API error response has this general structure:
 }
 ```
 
-### Required skeleton response
+### Required Skeleton Response
 
-Every unfinished REST route must return HTTP 501 with this response structure:
+Every unfinished REST route must return HTTP 501 with this exact response structure:
 
 ```json
 {
@@ -263,8 +344,6 @@ Every unfinished REST route must return HTTP 501 with this response structure:
 ```
 
 The server and routes must be runnable, but no business logic is implemented in this milestone.
-
----
 
 ## 6. Requirement Coverage
 
@@ -283,9 +362,7 @@ The server and routes must be runnable, but no business logic is implemented in 
 | FR11 | `POST /sync`; conflict listing and resolution routes |
 | FR12 | Authorization checks on protected routes; `GET /audit/records` |
 
-All eight architecture modules have public interfaces or route handlers. The API and module mappings above provide the entry points for the requirements.
-
----
+All eight architecture modules have public interfaces or route handlers. The API and module mappings above provide entry points for the functional requirements.
 
 ## 7. Dependencies and Implementation Limits
 
@@ -297,6 +374,5 @@ All eight architecture modules have public interfaces or route handlers. The API
 - The Earth-side system is external and is not implemented as another application module.
 - Authentication details and role-permission mapping remain open.
 - Conflict identification rules and damaged-cargo inventory treatment remain open.
+- Fractional quantity rules and concurrent inventory update behavior remain open.
 - Business logic is not implemented in this milestone.
-
-The next milestone can implement the operations one at a time using this contract as the interface reference.
