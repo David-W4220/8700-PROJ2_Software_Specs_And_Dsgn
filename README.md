@@ -41,16 +41,13 @@ project/
 - pip
 
 ## Installation
-
-Clone the repository and enter the project directory:
-
+Either clone the repository with 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
-cd YOUR_PROJECT_FOLDER
+git clone
 ```
+OR download a zip of the project.
 
-Create and activate a virtual environment:
-
+After entering the project directory, create and activate a virtual environment:
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
