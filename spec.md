@@ -50,7 +50,7 @@ As a Station Inventory Crew member, I want to find an item and view its current 
 **Goal:** G1
 
 ### FR2 Update Item Quantity
-As a Station Inventory Crew member, I want to update an item's quantity, so that the inventory accurately refllects the available stock. The system shall display the item's unit, reject negative quantities and usage above the available usable quantity, and record the user and time of the operation.
+As a Station Inventory Crew member, I want to update an item's quantity, so that the inventory accurately reflects the available stock. The system shall display the item's unit, reject negative quantities and usage above the available usable quantity, and record the user and time of the operation.
 **Goal:** G1
 
 ### FR3  Consistent Inventory Changes
@@ -298,7 +298,7 @@ Scenario: Record who changed an inventory item
 The following nonfunctional requirements define the necessary quality attributes and operational constraints to support our system's goals.
 
 ### NFR1 — Offline Availability (High Priority)
-When communition with Earth is unavaliable, the application shall still allow Station Inventory Crew to view locally stored inventory records and record valid inventory changes.
+When communication with Earth is unavailable, the application shall still allow Station Inventory Crew to view locally stored inventory records and record valid inventory changes.
 
 **Reason:** The system must remain usable during communication outages. This supports SysG4 (Maintain Inventory Availability During Communication Loss), FR10, and AC13.
 
@@ -313,11 +313,11 @@ The system shall start to synchronize pending inventory updates within 60 second
 **Reason:** Timely synchronization helps ensuring the station's inventory records to be consistent with Earth;s records. This supports FR11, AC14, and AC15.
 
 ### NFR4 — Security (High Priority)
-Assess to current inventory and mission records shall require authentication and stored records on the station and Earth shall be encrypted. Data transmittion between earth and station shall also be encrypted. Role-based permissions shall restrict users to the operations allowed for their assigned roles.
+Access to current inventory and mission records shall require authentication and stored records on the station and Earth shall be encrypted. Data transmission between earth and station shall also be encrypted. Role-based permissions shall restrict users to the operations allowed for their assigned roles.
 
 **Reason:** Inventory records and operational information must be protected from unauthorized access or modification. This supports FR12, AC16, and AC17.
 
 ### NFR5 — Search Performance (Medium Priority)
 Searching through 10,000 inventory records shall return results within 2 seconds in at least 95 out of 100 trials on the team's agreed test device.
 
-**Reason:** Crew members need to recieve inventory information efficiently. This This retains the measurable performance target from Project 1 and supports G1, FR1, and AC1.
+**Reason:** Crew members need to receive inventory information efficiently. This retains the measurable performance target from Project 1 and supports G1, FR1, and AC1.
