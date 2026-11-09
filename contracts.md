@@ -33,7 +33,6 @@ For Python interfaces, these structures are represented using `dict[str, Any]` a
 |---|---|
 | QuantityRequest | `quantity: float` |
 | UsageRequest | `quantity_used: float` |
-| CargoLineRequest | `item_id: str`, `quantity: float` |
 | CargoLinesRequest | `cargo_lines: list[CargoLineRequest]` |
 | LoadingRequest | `item_id: str`, `loaded_quantity: float` |
 | ReceiptLineRequest | `item_id: str`, `received_quantity: float`, `damaged_quantity: float \| None` |
@@ -263,8 +262,8 @@ The following response structures are proposed so that the API results can be te
 | `GET /inventory/{item_id}` | `item` |
 | `PATCH /inventory/{item_id}/quantity` | `item`, `update` |
 | `POST /inventory/{item_id}/usage` | `item`, `update`, `low_stock` |
-| `GET /inventory/{item_id}/updates` | `updates` |
-| `GET /resupply/needs` | `items` |
+| `GET /inventory/{item_id}/updates` | JSON array of update records |
+| `GET /resupply/needs` | JSON array of resupply-needs records |
 | `POST /missions/{mission_id}/capacity-check` | `mission_id`, `total_weight`, `total_volume`, `within_weight_capacity`, `within_volume_capacity`, `can_submit`, `errors` |
 | Manifest creation and update | `manifest`, `mission_status` |
 | Mission submission, approval, and dispatch | `mission` |
@@ -274,9 +273,9 @@ The following response structures are proposed so that the API results can be te
 | `POST /missions/{mission_id}/receipt` | `mission`, `received_lines`, `shortages`, `damages` |
 | `GET /sync/status` | `pending_update_count`, `last_successful_sync_time` |
 | `POST /sync` | `acknowledged`, `failed`, `conflicts`, `pending_update_count`, `last_successful_sync_time` |
-| `GET /sync/conflicts` | `conflicts` |
+| `GET /sync/conflicts` | JSON array of conflict records |
 | Conflict resolution | `conflict`, `audit_record` |
-| `GET /audit/records` | `records` |
+| `GET /audit/records` | JSON array of audit records |
 
 ### REST API Notes
 
