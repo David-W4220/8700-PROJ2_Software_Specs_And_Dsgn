@@ -1,0 +1,47 @@
+Github: https://github.com/David-W4220/8700-PROJ2_Software_Specs_And_Dsgn/new/ayden
+
+While I did not use Claude to change any of the prompts, I did have to remove the client/server instructions to get the code to run correctly after finishing the prompts the first time.
+It seemed confused by the 
+
+Output (python3 tests/run_classified.py, trimmed to its summary):
+
+Ran 38 tests in 0.129s
+FAILED (errors=66, skipped=1)
+
+FAILURE CLASSIFICATION
+  AT01_1_alert_text ......................... NOT IMPLEMENTED (domain_rules:alert_text)
+  AT01_1_next_mission, AT01_3, AT01_4 ....... NOT IMPLEMENTED (domain_rules:next_mission)
+  AT01_1_recent_activity_window, AT01_8–11 .. NOT IMPLEMENTED (domain_rules:recent_activity)
+  AT01_2_critical_first ..................... NOT IMPLEMENTED (domain_rules:order_alerts)
+  AT01_1_dashboard_screen ................... NOT IMPLEMENTED (station.onboard_store:open)
+  AT01_2_dashboard_critical_first ........... NOT IMPLEMENTED (station.onboard_store:open)
+  AT01_5_pending_excludes_rejected .......... NOT IMPLEMENTED (station.onboard_store:open)
+  AT01_6_earth_shows_last_reported_pending .. NOT IMPLEMENTED (earth.earth_store:open)
+  AT01_7_all_event_kinds_count_as_activity .. NOT IMPLEMENTED (earth.earth_store:open)
+  AT03_1 (+control), AT03_3 (+control) ...... NOT IMPLEMENTED (screens:visible_controls)
+  AT03_2 (+control), AT03_4 (+control) ...... NOT IMPLEMENTED (earth.gateway:handle)
+  AT03_5 matrix, 26 subtests ................ NOT IMPLEMENTED (earth.gateway:handle)
+  AT04_1–7, AT04_9–12, AT04_8 search ........ NOT IMPLEMENTED (domain_rules:filter_items)
+  AT04_8_station_barcode_lookup ............. NOT IMPLEMENTED (station.onboard_store:open)
+  AT03_6 .................................... skipped (blocked, see below)
+
+66 failing results, 0 of kind OTHER
+
+Per test: none of them failed on an assertion about behavior. Every one stopped at NotImplementedError in the contract function shown, before reaching its assertions. Two dashboard screen tests, AT01_1 and AT01_2 on the screen, are the only ones that stop in a collaborator: they fail when opening the Onboard Store, before StationScreens.dashboard is called. They will fail on dashboard once the store exists.
+
+How the tests are built
+
+Fixtures: test data is built only from Domain Rules types and the store write functions in the contract.
+AT-03 Earth enforcement: the services are passed into EarthGateway.handle as spies. “Nothing created” means no service was reached.
+Error code: every rejection asserts the error class, and that args[0] is a non-empty list of failures.
+Controls: each control is the adjacent test, or the paired subtest inside the matrix.
+
+Things the contract doesn’t fully cover
+
+Earth dashboard: no service function serves it, so AT01_6 checks only the stored count reported_pending_count, not the S1 page.
+Screen markup: the screens’ HTML isn’t in the contract, so screen assertions are text and order only. The activity entry count is checked through recent_activity instead.
+Plural unit names: AT01 expects “6 / 10 packs” from the AC text while the unit is named “pack”. The spec never says how unit names become plural.
+“Most recently changed”: for next_mission, this is judged by the latest status-history time, the only time field a mission has.
+Earth Store connection string: the format isn’t specified, so the tests pass a sqlite:/// path.
+
+Blocked: AT03_6. This case checks that Earth rejects a station update signed with a planner’s key. To write it, I need to create key pairs for c1 and p1 and produce a valid signature, and contracts.md has no function for either. StationIdentity.sign needs a private key in the store, and nothing in the contract writes one. Send the remaining row IDs whenever you want them written.
