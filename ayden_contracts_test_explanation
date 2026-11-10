@@ -1,7 +1,8 @@
-Github: https://github.com/David-W4220/8700-PROJ2_Software_Specs_And_Dsgn/new/ayden
+Github: https://github.com/David-W4220/8700-PROJ2_Software_Specs_And_Dsgn/blob/ayden/ayden_contracts_test_explanation
 
 While I did not use Claude to change any of the prompts, I did have to remove the client/server instructions to get the code to run correctly after finishing the prompts the first time.
-It seemed confused by the 
+It seemed confused by the structure we had initially set up for this mostly offline application having some online features and tried making the entire application online.
+No changes were made to the spec or architecture designed as the tests ran smoothly.
 
 Output (python3 tests/run_classified.py, trimmed to its summary):
 
