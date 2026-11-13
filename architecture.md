@@ -24,7 +24,7 @@ The Earth-side system is considered to be an external system as its implementati
 2. Authentication and Authorization verifies the user's identity and checks permission to update inventory.
 3. The user enters the quantity used. Inventory Management validates the change, including checking that the quantity is not negative and that usage does not exceed the available quantity.
 4. If the change is valid, Inventory Management creates an update record with a unique update ID and a timestamp from the station's system clock.
-5. Local Data Storage saves the updated quantity, update history, audit record, and pending synchronization record together. The application reports success only after the local save is completed.
+5. Local Data Storage saves the updated quantity, update history, audit record, and pending synchronization record. The application reports success only after the local, persistent save is completed.
 6. The User Interface displays the updated inventory and the number of pending updates. The saved changes remain available after an application restart.
 7. When communication with Earth is restored, Synchronization begins attempting to send pending updates within 60 seconds.
 8. Synchronization sends each update ID and its data to the Earth-side system. The Earth-side system checks update IDs so that previously processed updates are not applied again.
