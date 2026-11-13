@@ -8,7 +8,7 @@ This document defines the public interfaces for the eight modules in `architectu
 - **Testing framework:** pytest
 - **Request/response format:** JSON
 
-All business-operation functions are interface stubs during this milestone. Their bodies raise `NotImplementedError`. Each REST route catches this exception and returns HTTP 501.
+Business logic is not implemented. These functions bodies raise `NotImplementedError`. Each REST route catches this exception and returns HTTP 501. Furthermore, persistent database setup, external Earth-side system, details for Authentication role-based permission are excluded. The behavior for conflict identification, fractional quantities and concurrent inventory updates are also undefined.
 
 ## 2. Shared Data Structures
 
@@ -28,7 +28,7 @@ These structures describe the data exchanged between modules. They use the objec
 | AuditRecord | `user_id`, `action`, `entity_id`, `previous_values`, `new_values`, `timestamp`, `reviewer_id`, `reason` |
 |SyncConflict| `conflict_id`, `station_value`, `earth_value`, `status`, `selected_value`, `reviewer_id`, `timestamp`, `reason`, `item_id`|
 
-For Python interfaces, these structures are represented using `dict[str, Any]` and lists of dictionaries. API request bodies use typed request models.
+Internally, these structures are represented using `dict[str, Any]` and lists of dictionaries. API request bodies use typed request models.
 
 ### API Request Models
 
@@ -42,19 +42,11 @@ For Python interfaces, these structures are represented using `dict[str, Any]` a
 | ReceiptRequest | `received_lines: list[ReceiptLineRequest]` |
 | ConflictResolutionRequest | `selected_value: Any`, `reason: str` |
 
-Fractional inventory quantities and the handling of damaged quantities remain specification issues. The request models do not establish additional business rules for them.
-
 ## 3. Module Interfaces
 
 ### 3.1 User Interface
 
-**Responsibility:** Provides role-specific views and exposes the REST API routes listed in Section 4.
-
-The module contains the FastAPI route handlers. Each handler authenticates the request, calls the appropriate module functions, and returns the corresponding JSON response.
-
-It does not implement inventory, mission, permission, audit, storage, or synchronization business rules.
-
-The public route-handler functions and their mappings are specified in Section 4.
+This interface module provides role-specific views and exposes the REST API routes listed in Section 4. The route handlers will authenticate incoming requests, invoke the appropriate backend functions, and return the corresponding JSON responses. Mappings for all public route handlers are detailed in Section 4.
 
 **Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Mission and Shipment Management, Synchronization and Audit Logging. The user interface communicates with external earth-sede system via Synchronization module.
 
@@ -72,8 +64,6 @@ The public route-handler functions and their mappings are specified in Section 4
 - Local Data Storage to retrieve user information.
 - The authentication verifier used by the application.
 - A permission policy that determines whether a user can perform a particular action.
-
-The exact authentication mechanism and role-to-permission mapping are not specified. The implementation must not assume that every user with the same role automatically has every permission.
 
 ### 3.3 Inventory Management
 
@@ -96,8 +86,6 @@ The exact authentication mechanism and role-to-permission mapping are not specif
 - A clock for generating timestamps.
 - An ID generator for assigning unique update IDs.
 
-Inventory Management uses Local Data Storage to persist the updated item, inventory update, audit record, and pending synchronization information before reporting success for a valid inventory change.
-
 ### 3.4 Resupply Planning
 
 **Dependencies:** Authentication and Authorization, Inventory Management, Local Data Storage.
@@ -117,8 +105,7 @@ The capacity-check result should include:
 - `within_volume_capacity`
 - `can_submit`
 - `errors`
-
-An over-capacity result is returned as a capacity-check result. The actual submission operation must reject a mission that exceeds either capacity.
+An over-capacity result is returned as a capacity-check result.
 
 **Injected dependencies:**
 
@@ -145,10 +132,6 @@ Each `cargo_lines` entry contains `item_id` and `quantity`.
 
 Each `received_lines` entry contains `item_id` and `received_quantity`. An optional `damaged_quantity` field may be recorded when cargo damage is reported.
 
-The specification does not yet define whether damaged quantities should be included in usable inventory or stored separately. This must be clarified before that behavior is implemented.
-
-The manifest functions operate on an existing mission. Creating a new resupply mission is not currently covered by a functional requirement.
-
 **Injected dependencies:**
 
 - Authentication and Authorization for protected mission operations.
@@ -171,8 +154,6 @@ The manifest functions operate on an existing mission. Creating a new resupply m
 
 - Local Data Storage for persistent audit records.
 - A clock for generating timestamps.
-
-Conflict resolution must record both competing values, the selected value, the reviewer, timestamp, and reason. The specification does not clearly establish whether ordinary inventory updates also require a reason.
 
 ### 3.7 Local Data Storage
 
@@ -201,10 +182,6 @@ This module provides persistent access to station-side inventory, user, mission,
 | `save_sync_conflict` | `save_sync_conflict(conflict: dict[str, Any]) -> dict[str, Any]` | Saves a conflict record containing both competing values. | Storage failure. | FR11, AC15 |
 | `list_sync_conflicts` | `list_sync_conflicts() -> list[dict[str, Any]]` | Returns unresolved synchronization conflicts. | Storage failure. | FR11, AC15 |
 
-The storage module must preserve locally saved updates after application restarts. Pending updates must not be deleted until Earth acknowledges them.
-
-A single accepted inventory change should persist its item, update, and audit information together. The transaction handling is internal to Local Data Storage and does not require another architecture module.
-
 ### 3.8 Synchronization
 
 **Dependencies:** Local Data Storage, Audit Logging, external Earth-side system.
@@ -217,21 +194,14 @@ A single accepted inventory change should persist its item, update, and audit in
 | `resolve_conflict` | `resolve_conflict(conflict_id: str, selected_value: Any, reviewer_id: str, reason: str) -> dict[str, Any]` | Returns the resolved conflict and selected value. | Conflict not found, invalid resolution, or unauthorized operation. | FR11, FR12, AC15 |
 
 **Injected dependencies:**
-
 - Local Data Storage for pending updates, acknowledgements, conflicts, and synchronization timestamps.
 - Audit Logging for conflict-resolution records.
 - The external Earth-side system for sending updates and receiving acknowledgements.
 - A clock and scheduler for synchronization timing.
 
-The Earth-side system remains external. Its implementation and exact API are not part of this skeleton. The conflict detection and comparison rules remain to be defined.
-
 ## 4. REST API Contracts
 
-The following REST APIs are exposed through the User Interface module.
-
-All routes require an `Authorization` header. Authenticated user identity is obtained from the authorization context, not trusted from request-body `user_id` fields.
-
-Protected write operations must also pass the corresponding authorization check.
+The following REST APIs are exposed through the User Interface module. All routes require an `Authorization` header. Authenticated user identity is obtained from the authorization context, not trusted from request-body `user_id` fields. Protected write operations must also pass the corresponding authorization check.
 
 | Requirement | Method and route | Request body / parameters | Public function mapping |
 |---|---|---|---|
@@ -258,7 +228,7 @@ Protected write operations must also pass the corresponding authorization check.
 
 ### API Response Fields
 
-The following response structures are proposed so that the API results can be tested consistently.
+The following response structures validates API results:
 
 | Endpoint | Successful response fields |
 |---|---|
@@ -281,26 +251,23 @@ The following response structures are proposed so that the API results can be te
 | `GET /audit/records` | JSON array of audit records |
 
 ### REST API Notes
-
-1. FR10 does not need a separate endpoint for creating an offline inventory change. The existing quantity and usage endpoints perform the local inventory operation. The station stores the update locally, and `GET /sync/status` exposes the pending count and last successful synchronization time.
+1. FR10 doesn't need a separate endpoint for creating an offline inventory change. The existing quantity and usage endpoints perform the local inventory operation. The station stores the update locally, and `GET /sync/status` exposes the pending count and last successful synchronization time.
 
 2. FR7's Ground Mission Control view combines inventory records, recent updates, and synchronization status from the corresponding public functions.
 
 3. FR12 is partly cross-cutting. Authorization checks apply to inventory changes, manifest submission, approval, dispatch, cargo receipt, and conflict resolution. `GET /audit/records` provides access to audit information.
 
-4. FR5 validation must also be enforced when submitting a manifest. Calling the capacity-check endpoint alone must not be the only protection against over-capacity submission.
+4. FR5 validation must also be enforced when submitting a manifest. Calling the capacity-check endpoint alone is insufficient against over-capacity submissions.
 
-5. The REST APIs do not create a new Earth-side module. Synchronization communicates with the external Earth-side system through the dependency listed in the Synchronization module.
+5. Its also undefined whether damaged quantities should be included in usable inventory or stored separately.
 
-6. NFR1–NFR6 are quality requirements and do not each require a separate REST endpoint.
+6. NFR1–NFR6 are quality requirements and don't require individual REST endpoints.
 
-7. The manifest routes assume that the corresponding Draft mission already exists. Creating a new mission is not currently defined by a functional requirement.
+7. The manifest routes assume that the corresponding Draft mission already exists. Creating a new mission is currently  undefined by functional requirements.
 
-8. Updating item location, condition, or missing-item status is mentioned in the Domain Model and actor descriptions, but there are no corresponding functional requirements or REST routes in the current specification. These operations are not added here.
+8. Updating item location, condition, or missing-item status is mentioned in the Domain Model and actor descriptions, but there are no corresponding functional requirements or REST routes for them, thus those operations are not added here.
 
 ## 5. HTTP Response Contracts
-
-The following HTTP status codes are proposed API conventions. The original specification does not prescribe HTTP status codes.
 
 | Situation | HTTP status | Error code |
 |---|---:|---|
@@ -325,9 +292,9 @@ A normal API error response uses this structure:
 }
 ```
 
-### Required Skeleton Response
+### Skeleton Response
 
-Every unfinished REST route must return HTTP 501 with this exact response structure:
+Every unfinished REST route returns HTTP 501 with this exact response structure:
 
 ```json
 {
@@ -336,7 +303,7 @@ Every unfinished REST route must return HTTP 501 with this exact response struct
 }
 ```
 
-The server and routes must be runnable, but no business logic is implemented in this milestone.
+The server and routes are runnable, but no business logic is implemented yet.
 
 ## 6. Requirement Coverage
 
@@ -356,16 +323,3 @@ The server and routes must be runnable, but no business logic is implemented in 
 | FR12 | Authorization checks on protected routes; `GET /audit/records` |
 
 All eight architecture modules have public interfaces or route handlers. The API and module mappings above provide entry points for the functional requirements.
-
-## 7. Dependencies and Implementation Limits
-
-- Python 3.11 or later.
-- FastAPI for REST routes.
-- Uvicorn to start the server.
-- pytest and FastAPI TestClient for automated API tests.
-- Persistent database technology is not selected in this milestone.
-- The Earth-side system is external and is not implemented as another application module.
-- Authentication details and role-permission mapping remain open.
-- Conflict identification rules and damaged-cargo inventory treatment remain open.
-- Fractional quantity rules and concurrent inventory update behavior remain open.
-- Business logic is not implemented in this milestone.
