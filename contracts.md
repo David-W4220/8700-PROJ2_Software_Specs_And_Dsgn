@@ -17,13 +17,16 @@ These structures describe the data exchanged between modules. They use the objec
 | Structure | Main fields |
 |---|---|
 | User | `user_id`, `role` |
+| StorageLocation | `name` (e.g., Store A). `InventoryItem.location` refers to this location name. |
 | InventoryItem | `item_id`, `name`, `unit`, `quantity`, `condition`, `location`, `expiration_date`, `unit_weight`, `unit_volume`, `minimum_stock`, `importance` |
 | InventoryUpdate | `update_id`, `item_id`, `change_details`, `user_id`, `timestamp`, `sync_status` |
-| CargoLine | `item_id`, `quantity` |
+|SupplyAlert|`item_id`, `reason` (e.g., below minimum stock or missing item) |
+| CargoLineRequest | `item_id`, `quantity` (Temporary request structure for capacity check or creating/updating manifests. NOT a stored domain object.) |
 | ResupplyMission | `mission_id`, `status`, `weight_limit`, `volume_limit`, `expected_arrival`, `status_history` |
 | CargoManifest | `mission_id`, `version`, `status`, `cargo_lines` |
 | ManifestLine | `item_id`, `planned_quantity`, `loaded_quantity`, `received_quantity` |
 | AuditRecord | `user_id`, `action`, `entity_id`, `previous_values`, `new_values`, `timestamp`, `reviewer_id`, `reason` |
+|SyncConflict| `conflict_id`, `station_value`, `earth_value`, `status`, `selected_value`, `reviewer_id`, `timestamp`, `reason`, `item_id`|
 
 For Python interfaces, these structures are represented using `dict[str, Any]` and lists of dictionaries. API request bodies use typed request models.
 
@@ -33,7 +36,7 @@ For Python interfaces, these structures are represented using `dict[str, Any]` a
 |---|---|
 | QuantityRequest | `quantity: float` |
 | UsageRequest | `quantity_used: float` |
-| CargoLinesRequest | `cargo_lines: list[CargoLineRequest]` |
+| CargoLinesRequest | `cargo_lines: list[dict[str, Any]]` |
 | LoadingRequest | `item_id: str`, `loaded_quantity: float` |
 | ReceiptLineRequest | `item_id: str`, `received_quantity: float`, `damaged_quantity: float \| None` |
 | ReceiptRequest | `received_lines: list[ReceiptLineRequest]` |
@@ -53,7 +56,7 @@ It does not implement inventory, mission, permission, audit, storage, or synchro
 
 The public route-handler functions and their mappings are specified in Section 4.
 
-**Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Mission and Shipment Management, Synchronization, Audit Logging, and the external Earth-side system where required.
+**Dependencies:** Authentication and Authorization, Inventory Management, Resupply Planning, Mission and Shipment Management, Synchronization and Audit Logging. The user interface communicates with external earth-sede system via Synchronization module.
 
 ### 3.2 Authentication and Authorization
 
@@ -93,7 +96,7 @@ The exact authentication mechanism and role-to-permission mapping are not specif
 - A clock for generating timestamps.
 - An ID generator for assigning unique update IDs.
 
-An accepted inventory change must save the updated item, update history, audit information, and pending synchronization record locally before reporting success. These related records should be saved together.
+Inventory Management uses Local Data Storage to persist the updated item, inventory update, audit record, and pending synchronization information before reporting success for a valid inventory change.
 
 ### 3.4 Resupply Planning
 
@@ -232,26 +235,26 @@ Protected write operations must also pass the corresponding authorization check.
 
 | Requirement | Method and route | Request body / parameters | Public function mapping |
 |---|---|---|---|
-| FR1 | `GET /inventory/{item_id}` | Path: `item_id` | `InventoryManagement.find_item` |
-| FR2 | `PATCH /inventory/{item_id}/quantity` | `{"quantity": 9}` | `InventoryManagement.set_quantity` |
-| FR2 | `POST /inventory/{item_id}/usage` | `{"quantity_used": 3}` | `InventoryManagement.record_usage` |
-| FR3 | `GET /inventory/{item_id}/updates` | Query: `limit` | `InventoryManagement.get_update_history` |
-| FR4 | `GET /resupply/needs` | None | `ResupplyPlanning.get_resupply_needs` |
-| FR5 | `POST /missions/{mission_id}/capacity-check` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 10}]}` | `ResupplyPlanning.check_capacity` |
-| FR6 | `POST /missions/{mission_id}/manifest` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 10}]}` | `MissionShipmentManagement.create_manifest` |
-| FR6 | `PATCH /missions/{mission_id}/manifest` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 12}]}` | `MissionShipmentManagement.update_manifest` |
-| FR6 | `POST /missions/{mission_id}/submit` | None | `MissionShipmentManagement.submit_manifest` |
-| FR12 | `POST /missions/{mission_id}/approval` | None | `MissionShipmentManagement.approve_mission` |
-| FR12 | `POST /missions/{mission_id}/dispatch` | None | `MissionShipmentManagement.confirm_dispatch` |
-| FR7 | `GET /ground/inventory` | None | `InventoryManagement.list_inventory`, `InventoryManagement.get_update_history`, `Synchronization.get_status` |
-| FR8 | `POST /missions/{mission_id}/loading` | `{"item_id": "WTR-001", "loaded_quantity": 18}` | `MissionShipmentManagement.record_loading` |
-| FR9 | `GET /missions/{mission_id}` | Path: `mission_id` | `MissionShipmentManagement.get_mission` |
-| FR9 | `POST /missions/{mission_id}/receipt` | `{"received_lines": [{"item_id": "WTR-001", "received_quantity": 18}]}` | `MissionShipmentManagement.record_shipment_receipt` |
+| FR1 | `GET /inventory/{item_id}` | Path: `item_id` | `inventory_management.find_item` |
+| FR2 | `PATCH /inventory/{item_id}/quantity` | `{"quantity": 9}` | `inventory_management.set_quantity` |
+| FR2 | `POST /inventory/{item_id}/usage` | `{"quantity_used": 3}` | `inventory_management.record_usage` |
+| FR3 | `GET /inventory/{item_id}/updates` | Query: `limit` | `inventory_management.get_update_history` |
+| FR4 | `GET /resupply/needs` | None | `resupply_planning.get_resupply_needs` |
+| FR5 | `POST /missions/{mission_id}/capacity-check` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 10}]}` | `resupply_planning.check_capacity` |
+| FR6 | `POST /missions/{mission_id}/manifest` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 10}]}` | `mission_shipment_management.create_manifest` |
+| FR6 | `PATCH /missions/{mission_id}/manifest` | `{"cargo_lines": [{"item_id": "WTR-001", "quantity": 12}]}` | `mission_shipment_management.update_manifest` |
+| FR6 | `POST /missions/{mission_id}/submit` | None | `mission_shipment_management.submit_manifest` |
+| FR12 | `POST /missions/{mission_id}/approval` | None | `mission_shipment_management.approve_mission` |
+| FR12 | `POST /missions/{mission_id}/dispatch` | None | `mission_shipment_management.confirm_dispatch` |
+| FR7 | `GET /ground/inventory` | None | `inventory_management.list_inventory`, `inventory_management.get_update_history`, `Synchronization.get_status` |
+| FR8 | `POST /missions/{mission_id}/loading` | `{"item_id": "WTR-001", "loaded_quantity": 18}` | `mission_shipment_management.record_loading` |
+| FR9 | `GET /missions/{mission_id}` | Path: `mission_id` | `mission_shipment_management.get_mission` |
+| FR9 | `POST /missions/{mission_id}/receipt` | `{"received_lines": [{"item_id": "WTR-001", "received_quantity": 18}]}` | `mission_shipment_management.record_shipment_receipt` |
 | FR10 | `GET /sync/status` | None | `Synchronization.get_status` |
 | FR11 | `POST /sync` | None | `Synchronization.synchronize_pending_updates` |
 | FR11 | `GET /sync/conflicts` | None | `Synchronization.list_conflicts` |
 | FR11, FR12 | `POST /sync/conflicts/{conflict_id}/resolution` | `{"selected_value": "Store B", "reason": "Physical inventory confirms Store B"}` | `Synchronization.resolve_conflict` |
-| FR12 | `GET /audit/records` | Optional query: `entity_id`, `limit` | `AuditLogging.list_records` |
+| FR12 | `GET /audit/records` | Optional query: `entity_id`, `limit` | `audit_logging.list_records` |
 
 ### API Response Fields
 
