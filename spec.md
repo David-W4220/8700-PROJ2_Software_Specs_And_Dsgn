@@ -33,6 +33,8 @@ The system preserves inventory changes at communication outages with Earth and r
 - **CargoManifest:** Records the cargo planned for a mission, its version, and its status. Editing a submitted or approved manifest before dispatch returns the mission to Draft and requires resubmission and approval.
 - **ManifestLine:** Connects a cargo manifest to an inventory item and records planned, loaded, and received quantities.
 - **User:** Identifies an authenticated user with an assigned role (Station Inventory Crew, Logistics Planner, or Ground Mission Control). The assigned role determines the restricted actions allowed for users.
+- **AuditRecord:** Records a valid system operation, including the operator, time, affected record, and details of the change. For conflict resolutions, it'll record both competing values, the selected value, reviewer, and reason.
+- **SyncConflict:** Represent that conflict exists between station and Earth updates. It retains both competing values for review and records the resolution details when an authorized reviewer resolves conflicts.
   
 ## Domain Rules
 
