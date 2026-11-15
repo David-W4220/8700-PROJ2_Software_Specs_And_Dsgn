@@ -1,5 +1,7 @@
 """HTTP entry point for the station inventory skeleton."""
 
+from datetime import datetime
+
 from flask import Flask, jsonify, request
 
 from conflict_review import resolve_conflict
@@ -22,16 +24,20 @@ def not_implemented_response(operation: str):
 def post_supply_use(item_id: str):
     payload = request.get_json(silent=True) or {}
     try:
-        record_supply_use(
+        result = record_supply_use(
             item_id=item_id,
             used_quantity=payload.get("used_quantity"),
             user_id=payload.get("user_id"),
-            now=payload.get("now"),
+            now=datetime.fromisoformat(payload.get("now", "").replace("Z", "+00:00")),
             update_id=payload.get("update_id"),
         )
+    except PermissionError as error:
+        return jsonify(error="forbidden", message=str(error)), 403
+    except ValueError as error:
+        return jsonify(error="validation_error", message=str(error)), 400
     except NotImplementedError:
         return not_implemented_response("Record supply use")
-    return not_implemented_response("Record supply use")
+    return jsonify(result), 200
 
 
 @app.get("/earth/inventory")
@@ -48,7 +54,7 @@ def post_offline_update():
     payload = request.get_json(silent=True) or {}
     try:
         save_offline_change(update=payload.get("update"))
-    except NotImplementedError:
+    except (NotImplementedError, KeyError):
         return not_implemented_response("Save an offline inventory change")
     return not_implemented_response("Save an offline inventory change")
 
