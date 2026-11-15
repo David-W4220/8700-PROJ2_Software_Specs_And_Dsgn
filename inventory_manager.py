@@ -15,7 +15,11 @@ def record_supply_use(
 ) -> dict:
     """Record a crew member's supply use and return the updated inventory item."""
     user = require_authenticated_user(user_id)
+    if isinstance(used_quantity, bool) or not isinstance(used_quantity, int):
+        raise ValueError("used_quantity must be an integer.")
     item = get_inventory_item(item_id)
+    if used_quantity > item["quantity"]:
+        raise ValueError("Usage cannot exceed the available quantity.")
 
     time_value = now.isoformat()
     if time_value.endswith("+00:00"):
