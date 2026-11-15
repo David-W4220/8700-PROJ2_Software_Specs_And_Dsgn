@@ -71,19 +71,21 @@ def get_station_sync_status():
 @app.get("/station/inventory/items/<item_id>")
 def get_station_inventory_item(item_id: str):
     try:
-        get_inventory_item(item_id=item_id)
+        result = get_inventory_item(item_id=item_id)
     except NotImplementedError:
         return not_implemented_response("View station inventory item")
-    return not_implemented_response("View station inventory item")
+    except KeyError:
+        return jsonify(error="not_found", message="Inventory item was not found."), 404
+    return jsonify(result), 200
 
 
 @app.get("/station/inventory/items/<item_id>/updates")
 def get_station_item_updates(item_id: str):
     try:
-        get_update_history(item_id=item_id)
+        result = get_update_history(item_id=item_id)
     except NotImplementedError:
         return not_implemented_response("View station item update history")
-    return not_implemented_response("View station item update history")
+    return jsonify(result), 200
 
 
 @app.post("/sync")
