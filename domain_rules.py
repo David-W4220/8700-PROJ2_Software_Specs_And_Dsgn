@@ -764,7 +764,16 @@ def earth_link_available(session_open: bool, last_station_contact: Optional[date
 
 def order_alerts(alerts: Sequence[SupplyAlert],
                  items: Mapping[str, InventoryItem]) -> list[SupplyAlert]:
-    raise NotImplementedError
+    active = [a for a in alerts if a.alert_status is AlertStatus.ACTIVE]
+    missing = sorted({a.item_id for a in active if a.item_id not in items})
+    if missing:
+        raise NotFound([f"no item {item_id}" for item_id in missing])
+    # Critical items first (FR-001). Decision (Nov 16, 2026): within the same
+    # criticality, newest raisedAt first; item ID breaks exact ties.
+    ordered = sorted(active, key=lambda a: a.item_id)
+    ordered.sort(key=lambda a: a.raised_at, reverse=True)
+    ordered.sort(key=lambda a: items[a.item_id].criticality is not Criticality.CRITICAL)
+    return ordered
 
 
 def next_mission(missions: Sequence[ResupplyMission]) -> Optional[ResupplyMission]:
@@ -780,7 +789,9 @@ def order_history(updates: Sequence[InventoryUpdate]) -> list[InventoryUpdate]:
 
 
 def alert_text(item: InventoryItem) -> str:
-    raise NotImplementedError
+    # The unit follows the minimum, so the plural rule applies to the minimum.
+    return (f"{item.name} below minimum "
+            f"({item.quantity:f} / {_quantity_text(item.minimum_quantity, item.unit)})")
 
 
 def format_utc(moment: datetime, now: datetime) -> str:

@@ -89,7 +89,8 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Skeleton to fill in:** `alert_text`, `order_alerts`.
 - **Depends on:** none.
 - **Done when:** the listed tests pass and no previously passing test fails.
-- **Status:** not started.
+- **Status:** done (Nov 16, 2026). Both tests pass; no regressions.
+- *Decisions taken (Nov 16, 2026):* within the same criticality, alerts are ordered newest `raisedAt` first, item ID breaking exact ties; Resolved alerts are dropped. In `alert_text` the unit follows the minimum, so the slice-3 plural rule applies to the minimum ("(6 / 10 packs)", "(0 / 1 kit)").
 
 ### Slice 5: Next mission rule
 - **Goal:** The next mission is the Submitted, Approved or Shipped mission with the earliest expected arrival. If none has an arrival, it is the most recently changed one.
