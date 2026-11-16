@@ -816,7 +816,12 @@ def next_mission(missions: Sequence[ResupplyMission]) -> Optional[ResupplyMissio
 
 
 def recent_activity(events: Sequence[ActivityEvent], now: datetime) -> list[ActivityEvent]:
-    raise NotImplementedError
+    # Decisions (Nov 16, 2026): the 7-day edge is inclusive; an event later
+    # than "now" is kept (no upper bound); equal times keep the input order.
+    since = now - RECENT_ACTIVITY_WINDOW
+    recent = [event for event in events if event.time >= since]
+    recent.sort(key=lambda event: event.time, reverse=True)   # stable sort
+    return recent[:RECENT_ACTIVITY_LIMIT]
 
 
 def order_history(updates: Sequence[InventoryUpdate]) -> list[InventoryUpdate]:
