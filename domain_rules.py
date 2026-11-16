@@ -8,7 +8,7 @@ the only module both sites depend on.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Mapping, Optional, Protocol, Sequence, Union
@@ -635,24 +635,46 @@ def alert_coverage(item: InventoryItem, line_quantity: Optional[Decimal]) -> Cov
 # --------------------------------------------------------------------------
 
 def today_utc(now: datetime) -> date:
-    raise NotImplementedError
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    return now.astimezone(timezone.utc).date()
 
 
 def is_low_stock(item: InventoryItem) -> bool:
-    raise NotImplementedError
+    return item.quantity < item.minimum_quantity
 
 
 def is_expired(item: InventoryItem, today: date) -> bool:
-    raise NotImplementedError
+    return item.expiry_date is not None and item.expiry_date < today
 
 
 def matches_query(item: InventoryItem, query: str) -> bool:
-    raise NotImplementedError
+    if query == "":
+        return True
+    needle = query.casefold()
+    return (needle in item.name.casefold()
+            or needle in item.item_id.casefold()
+            or query in item.barcodes)
 
 
 def filter_items(items: Sequence[InventoryItem], query: str,
                  item_filter: InventoryFilter, today: date) -> list[InventoryItem]:
-    raise NotImplementedError
+    def passes(item: InventoryItem) -> bool:
+        if item_filter is InventoryFilter.LOW_STOCK:
+            return is_low_stock(item)
+        if item_filter is InventoryFilter.DAMAGED:
+            return item.condition is Condition.DAMAGED
+        if item_filter is InventoryFilter.EXPIRED:
+            return is_expired(item, today)
+        return True
+    return [item for item in items if passes(item) and matches_query(item, query)]
+
+
+def _quantity_text(quantity: Decimal, unit: Unit) -> str:
+    """'6 packs', '1 kit', '2.000 kg'. Decision (Nov 16, 2026): a countable
+    unit takes a plural 's' unless the quantity is exactly 1; other units never do."""
+    name = unit.name + "s" if unit.countable and quantity != 1 else unit.name
+    return f"{quantity:f} {name}"
 
 
 # --------------------------------------------------------------------------

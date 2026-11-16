@@ -52,6 +52,12 @@ CREATE TABLE IF NOT EXISTS items (
     item_id TEXT PRIMARY KEY,
     data    TEXT NOT NULL
 );
+-- Barcodes are unique across items (InventoryItem); lookup index (NFR-007).
+CREATE TABLE IF NOT EXISTS barcodes (
+    barcode TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS barcodes_item ON barcodes (item_id);
 CREATE TABLE IF NOT EXISTS earth_base (
     item_id TEXT PRIMARY KEY,
     data    TEXT NOT NULL
@@ -177,10 +183,14 @@ class StationReadTx:
         raise NotImplementedError
 
     def list_items(self) -> list[InventoryItem]:
-        raise NotImplementedError
+        rows = self._conn.execute("SELECT data FROM items ORDER BY item_id")
+        return [_loads(data) for (data,) in rows]
 
     def find_by_barcode(self, barcode: str) -> Optional[InventoryItem]:
-        raise NotImplementedError
+        row = self._conn.execute(
+            "SELECT items.data FROM barcodes JOIN items USING (item_id) "
+            "WHERE barcodes.barcode = ?", (barcode,)).fetchone()
+        return None if row is None else _loads(row[0])
 
     def earth_base(self, item_id: str) -> InventoryItem:
         raise NotImplementedError
@@ -254,6 +264,14 @@ class StationWriteTx(StationReadTx):
             "INSERT INTO items (item_id, data) VALUES (?, ?) "
             "ON CONFLICT (item_id) DO UPDATE SET data = excluded.data",
             (item.item_id, _dumps(item)))
+        # Decision (Nov 16, 2026): a barcode held by another item is rejected.
+        self._conn.execute("DELETE FROM barcodes WHERE item_id = ?", (item.item_id,))
+        try:
+            self._conn.executemany(
+                "INSERT INTO barcodes (barcode, item_id) VALUES (?, ?)",
+                [(code, item.item_id) for code in item.barcodes])
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"{item.item_id}: barcode already used by another item") from exc
 
     def put_earth_base(self, item: InventoryItem) -> None:
         self._conn.execute(

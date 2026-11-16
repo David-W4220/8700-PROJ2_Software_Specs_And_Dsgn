@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Mapping, Optional
 
 from ssir.domain_rules import (
     Action, InventoryFilter, InvalidTransition, MissionStatus, ResupplyMission,
-    Transition, User, is_permitted, next_status,
+    Transition, User, _quantity_text, filter_items, is_permitted, next_status,
+    today_utc,
 )
 
 if TYPE_CHECKING:
@@ -124,7 +125,18 @@ class StationScreens:
                 f"<p>{escape(f'{pending} pending updates')}</p></main>")
 
     def inventory(self, session: Session, query: str, item_filter: InventoryFilter) -> str:
-        raise NotImplementedError
+        today = today_utc(self._clock.now())
+        with self._store.read() as tx:
+            items = filter_items(tx.list_items(), query, item_filter, today)
+        # Decision (Nov 16, 2026): sorted by name, case-insensitive; ID breaks ties.
+        items.sort(key=lambda item: (item.name.casefold(), item.item_id))
+        rows = "".join(
+            f"<tr><td>{escape(item.item_id)}</td><td>{escape(item.name)}</td>"
+            f"<td>{escape(_quantity_text(item.quantity, item.unit))}</td></tr>"
+            for item in items)
+        return (f"<main><h1>{escape(Screen.S2_INVENTORY.value)}</h1>"
+                f"<p>{escape(f'Search: {query}')} &middot; {escape(f'Filter: {item_filter.value}')}</p>"
+                f"<table>{rows}</table></main>")
 
     def item_details(self, session: Session, item_id: str) -> str:
         raise NotImplementedError

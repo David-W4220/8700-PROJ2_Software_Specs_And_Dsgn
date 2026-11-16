@@ -75,7 +75,11 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Skeleton to fill in:** `today_utc`, `is_low_stock`, `is_expired`, `matches_query`, `filter_items`, `StationReadTx.list_items`, `StationReadTx.find_by_barcode`, `StationScreens.inventory`. Route: S2 on the station.
 - **Depends on:** 1.
 - **Done when:** the listed tests pass and no previously passing test fails.
-- **Status:** not started.
+- **Status:** done (Nov 16, 2026). All 13 AT04 tests pass; no regressions.
+- *Decisions taken (Nov 16, 2026):*
+  - The station keeps a unique barcode index; `StationWriteTx.put_item` raises `ValueError` for a barcode another item holds (mirrors `EarthTx.put_item`).
+  - S2 lists items by name (case-insensitive, ID breaks ties), each row showing ID, name and quantity with unit.
+  - Quantity text: a countable unit takes "s" unless the quantity is exactly 1; other units never do ("6 packs", "1 kit", "2.000 kg"). Kept as the private Domain Rules helper `_quantity_text` so `alert_text` (slice 4) reuses it.
 
 ### Slice 4: Alert text and Critical-first ordering
 - **Goal:** Active alerts are listed with Critical items first, as "\<item> below minimum (\<qty> / \<min> \<unit>)".
