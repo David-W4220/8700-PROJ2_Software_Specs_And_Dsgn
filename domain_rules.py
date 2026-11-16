@@ -776,8 +776,43 @@ def order_alerts(alerts: Sequence[SupplyAlert],
     return ordered
 
 
+# Missions that can be "next" (FR-001), ranked by how far along they are.
+# Decision (Nov 16, 2026): ties go to the more advanced status.
+_NEXT_MISSION_RANK: Mapping[MissionStatus, int] = {
+    MissionStatus.SHIPPED: 0,
+    MissionStatus.APPROVED: 1,
+    MissionStatus.SUBMITTED: 2,
+}
+
+
+def _mission_number(mission: ResupplyMission) -> tuple[int, str]:
+    """Numeric order of R… IDs (R9 before R10); non-numeric IDs sort after."""
+    digits = mission.mission_id[1:]
+    return (int(digits), "") if digits.isdigit() else (2**63, mission.mission_id)
+
+
+def _last_changed(mission: ResupplyMission) -> Optional[datetime]:
+    """Decision (Nov 16, 2026): a mission last changed at its latest
+    status-history entry; manifest saves leave no time on the mission."""
+    return max((entry.time for entry in mission.status_history), default=None)
+
+
 def next_mission(missions: Sequence[ResupplyMission]) -> Optional[ResupplyMission]:
-    raise NotImplementedError
+    candidates = [m for m in missions if m.mission_status in _NEXT_MISSION_RANK]
+    if not candidates:
+        return None
+
+    def tie_break(m: ResupplyMission) -> tuple:
+        return (_NEXT_MISSION_RANK[m.mission_status], _mission_number(m))
+
+    with_arrival = [m for m in candidates if m.expected_arrival is not None]
+    if with_arrival:
+        return min(with_arrival, key=lambda m: (m.expected_arrival, tie_break(m)))
+    # Most recently changed first; a mission with no history counts as oldest.
+    newest = max((_last_changed(m) for m in candidates if _last_changed(m) is not None),
+                 default=None)
+    tied = [m for m in candidates if _last_changed(m) == newest]
+    return min(tied, key=tie_break)
 
 
 def recent_activity(events: Sequence[ActivityEvent], now: datetime) -> list[ActivityEvent]:

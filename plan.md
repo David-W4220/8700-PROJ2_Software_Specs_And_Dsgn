@@ -100,7 +100,8 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Skeleton to fill in:** `next_mission`.
 - **Depends on:** none.
 - **Done when:** the listed tests pass and no previously passing test fails.
-- **Status:** not started.
+- **Status:** done (Nov 16, 2026). All 3 tests pass; no regressions.
+- *Decisions taken (Nov 16, 2026):* a mission "last changed" at its latest status-history entry (answers Design question 6; manifest saves do not count). Ties, on arrival or on change time, go to the more advanced status (Shipped, Approved, Submitted), then the lowest mission number (R9 before R10). If any candidate has an expected arrival, only those are compared.
 - *Isolated because:* the status filter, the null-arrival fallback and the meaning of "changed" are easy to get subtly wrong (see Design question 6).
 
 ### Slice 6: Recent activity window
