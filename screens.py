@@ -11,7 +11,10 @@ import threading
 from enum import Enum
 from typing import TYPE_CHECKING, Mapping, Optional
 
-from ssir.domain_rules import Action, InventoryFilter, ResupplyMission, User
+from ssir.domain_rules import (
+    Action, InventoryFilter, InvalidTransition, MissionStatus, ResupplyMission,
+    Transition, User, is_permitted, next_status,
+)
 
 if TYPE_CHECKING:
     from ssir.earth.gateway import EarthGateway
@@ -35,9 +38,67 @@ def escape(text: str) -> str:
     return html.escape(text, quote=True)
 
 
+# Decision (Nov 16, 2026): which controls each screen carries. The spec does
+# not place controls on screens; this table is derived from the screen names,
+# the FR wording and the contracts' screen descriptions. VIEW is not a control.
+_SCREEN_ACTIONS: dict[Screen, frozenset[Action]] = {
+    Screen.S1_DASHBOARD: frozenset(),
+    Screen.S2_INVENTORY: frozenset({Action.CREATE_ITEM, Action.CREATE_LOCATION}),
+    Screen.S3_ITEM_DETAILS: frozenset({
+        Action.RECORD_USAGE, Action.MOVE_ITEM, Action.SET_CONDITION,
+        Action.CORRECT_ITEM, Action.EDIT_ITEM}),
+    Screen.S4_RESUPPLY_PLAN: frozenset({
+        Action.CREATE_MISSION, Action.SAVE_MANIFEST, Action.SUBMIT_MISSION}),
+    Screen.S5_CARGO_MANIFEST: frozenset({Action.RECORD_LOADING, Action.RECORD_RECEIPT}),
+    Screen.S6_MISSION_STATUS: frozenset({
+        Action.APPROVE_MISSION, Action.RETURN_MISSION, Action.REOPEN_MISSION,
+        Action.CANCEL_MISSION, Action.CONFIRM_DISPATCH, Action.RECORD_RECEIPT,
+        Action.RESOLVE_DISCREPANCY}),
+    Screen.S7_SYNC: frozenset({Action.RESOLVE_CONFLICT, Action.SYNC_NOW}),
+}
+
+# Mission actions that are lifecycle transitions: allowed when the state
+# machine (Domain Rules next_status) allows the transition from the status.
+_TRANSITION_OF: dict[Action, Transition] = {
+    Action.SUBMIT_MISSION: Transition.SUBMIT,
+    Action.APPROVE_MISSION: Transition.APPROVE,
+    Action.RETURN_MISSION: Transition.RETURN,
+    Action.REOPEN_MISSION: Transition.REOPEN,
+    Action.CANCEL_MISSION: Transition.CANCEL,
+    Action.CONFIRM_DISPATCH: Transition.CONFIRM_DISPATCH,
+    Action.RECORD_RECEIPT: Transition.RECORD_RECEIPT,
+}
+
+# Mission actions that are not transitions, with the statuses the spec allows:
+# lines in Draft and expected arrival also in Approved (Lifecycle, FR-016);
+# loading on an approved mission (FR-022). Discrepancies are resolved whatever
+# the mission status (FR-026).
+_STATUSES_OF: dict[Action, frozenset[MissionStatus]] = {
+    Action.SAVE_MANIFEST: frozenset({MissionStatus.DRAFT, MissionStatus.APPROVED}),
+    Action.RECORD_LOADING: frozenset({MissionStatus.APPROVED}),
+    Action.RESOLVE_DISCREPANCY: frozenset(MissionStatus),
+}
+
+
+def _allowed_by_status(action: Action, mission: Optional[ResupplyMission]) -> bool:
+    if action in _TRANSITION_OF:
+        if mission is None:
+            return False
+        try:
+            next_status(mission.mission_status, _TRANSITION_OF[action])
+        except InvalidTransition:
+            return False
+        return True
+    if action in _STATUSES_OF:
+        return mission is not None and mission.mission_status in _STATUSES_OF[action]
+    return True
+
+
 def visible_controls(user: User, screen: Screen,
                      mission: Optional[ResupplyMission] = None) -> frozenset[Action]:
-    raise NotImplementedError
+    return frozenset(
+        action for action in _SCREEN_ACTIONS[screen]
+        if is_permitted(user, action) and _allowed_by_status(action, mission))
 
 
 class StationScreens:
