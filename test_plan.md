@@ -1,13 +1,13 @@
 # Test Plan — David Wang
 
 ## 1. Overview
+This plan refines the 17 acceptance criteria in `spec.md` into test cases, with each test having a unique ID. It uses the BDD alternative and included additional cases to cover boundaries, controls, and non-functional requirements.
 
-This document refines the 17 acceptance criteria in `spec.md` into concrete test cases and Each test has a unique ID. It uses the BDD alternative and included additional cases to cover boundaries, controls, and nonfunctional requirements.
+Every unfinished REST route returns HTTP 501 with the required `not_implemented` response when the request matches its declared path and request body in this skeleton. If a request is malformed or missing required fields, it may be rejected before reaching route handler. Note that, the expected results below are describing the finalized application behavior.
+
 
 ### Test Conventions
-
-- `WTR-001` represents a water inventory item measured in packs.
-- Unless otherwise stated, `WTR-001` starts with 12 usable packs, a minimum stock level of 10, location `Store A`, and condition `Usable`.
+- `WTR-001` represents a water inventory item `Water packs` measured in unit `pack`, with 12 usable packs, a minimum stock level of 10, location `Store A` and condition `Usable`.
 - Test users are authenticated users with explicitly configured permissions. This avoids assuming an undefined role-to-permission mapping.
 - A fixed test clock is used for timestamp checks.
 - Each test starts with an independent initial state unless stated otherwise.
@@ -28,7 +28,6 @@ The specification does not define HTTP status codes. The following are proposed 
 | Earth-side communication unavailable | 503 |
 | Not implemented in this milestone | 501 |
 
-**Skeleton note:** During this milestone, every unfinished REST route must return HTTP 501 with the required `not_implemented` response. The expected results below describe the eventual application behavior, not the temporary skeleton response.
 
 ## 2. Acceptance Criteria Tests
 
@@ -337,7 +336,7 @@ The specification does not define HTTP status codes. The following are proposed 
 - Given a Draft mission exists without a cargo manifest.
 - When the Logistics Planner creates a manifest containing 10 water packs.
 - Then the system saves the manifest and associates it with the mission.
-- Expected result: HTTP 200; the returned manifest identifies the mission and contains 10 planned packs.
+- Expected result: HTTP 200; the returned manifest identifies the mission and contains 10 planned packs as well as manifest version.
 - Side effects: One manifest is created.
 
 **AT09-06 — Extra: Update a Draft manifest**
@@ -436,10 +435,10 @@ The specification does not define HTTP status codes. The following are proposed 
 
 **AT15-01 — Retain competing station and Earth values**
 
-- Given an item's original location is `Store A`.
-- And the station changes its location to `Store B`.
-- And Earth changes its location to `Store C`.
-- When the changes synchronize.
+- Given `WTR-001`'s original location is `Store A`.
+- And the station has a pendiing update `U201` changing its location to `Store B`.
+- And Earth-side contains a conflicting update of changing its location to `Store C`.
+- When synchronization processes the pending update.
 - Then the system identifies a conflict.
 - And retains both `Store B` and `Store C` for review.
 - Expected result: Both competing values are available for review.
@@ -447,7 +446,7 @@ The specification does not define HTTP status codes. The following are proposed 
 
 **AT15-02 — Authorized reviewer resolves a conflict**
 
-- Given the conflict from AT15-01 remains unresolved.
+- Given the conflict for `WTR-001` from AT15-01 remains unresolved.
 - And the reviewer is authorized to resolve synchronization conflicts.
 - When the reviewer selects `Store B` and enters the reason `Physical inventory confirms Store B`.
 - Then the current location becomes `Store B`.
@@ -457,9 +456,9 @@ The specification does not define HTTP status codes. The following are proposed 
 
 **AT15-03 — Extra: Reject unauthorized conflict resolution**
 
-- Given a synchronization conflict exists.
-- And the signed-in user is not authorized to resolve conflicts.
-- When the user attempts to select `Store B` and enter a resolution reason.
+- Given the same unresolved conflict for `WTR-001` exists.
+- And the signed-in user isn't authorized to resolve conflicts.
+- When the user attempts to select `Store B` and enter a reason `Physical inventory confirms Store B`.
 - Then the system rejects the operation.
 - And both conflicting values remain available for review.
 - Expected result: HTTP 403; error code `permission_denied`.
@@ -495,7 +494,7 @@ The specification does not define HTTP status codes. The following are proposed 
 - Then the system rejects the operation.
 - Expected result: HTTP 403.
 - Side effects: No inventory update is created; quantity remains unchanged.
-- Control: The same update is accepted when the user is explicitly granted permission.
+- Control: AT02-01 uses the same valid usage request when the user's explicitly granted inventory-update permission. Everything else in the request data and starting inventory should be identical?.
 
 **AT16-04 — Extra: Reject unauthorized dispatch**
 
@@ -505,7 +504,7 @@ The specification does not define HTTP status codes. The following are proposed 
 - Then the system rejects the operation.
 - Expected result: HTTP 403.
 - Side effects: No dispatch record is created; status remains Approved.
-- Control: The same dispatch operation is accepted when the user is explicitly granted permission.
+- Control: AT09-03 demonstrates an accepted dispatch by an explicitly authorized user under the same valid mission state.
 
 **AT16-05 — Extra: Reject unauthorized cargo receipt**
 
@@ -515,7 +514,7 @@ The specification does not define HTTP status codes. The following are proposed 
 - Then the system rejects the operation.
 - Expected result: HTTP 403.
 - Side effects: No receipt is created; inventory remains unchanged.
-- Control: The same receipt operation is accepted when the user is explicitly granted permission.
+- Control: AT12-01 demonstrates a receipt of the same cargo being accepted when the user is explicitly authorized to record cargo receipt.
 
 **AT16-06 — Extra: Reject unauthenticated access**
 
@@ -524,14 +523,14 @@ The specification does not define HTTP status codes. The following are proposed 
 - Then the system denies access.
 - Expected result: HTTP 401; error code `unauthenticated`.
 - Side effects: No protected inventory data is returned.
-- Control: The same request succeeds with an authenticated user who has permission to view inventory.
+- Control: AT01-01 demonstrates the same inventory lookup by an authenticated user with permission to view inventory.
 
 ### AC17 — Audit an Accepted Change (FR12)
 
 **AT17-01 — Record the user, time, and changed values**
 
 - Given `WTR-001` has 4 packs.
-- And user `crew-01` is authenticated and authorized to update inventory.
+- And user `crew-01` is authenticated and authorized to both update inventory and dispatch missions.
 - And the test clock is set to `2026-11-09T10:30:00-06:00`.
 - When `crew-01` changes the quantity from 4 to 6.
 - Then the system records the accepted change.
@@ -569,24 +568,21 @@ The specification does not define HTTP status codes. The following are proposed 
 
 **AT-X03 — Extra: Start synchronization within 59 seconds**
 
-- Given pending inventory updates exist.
-- And communication is restored at `10:00:00`.
+- Given pending inventory updates exist and the system detects that communication with Earth has been restored at `10:00:00`.
 - When the system detects the restored connection and starts synchronization at `10:00:59`.
 - Then the synchronization timing requirement passes.
 - Expected result: Synchronization starts within 60 seconds.
 
 **AT-X04 — Extra: Start synchronization at the 60-second boundary**
 
-- Given pending inventory updates exist.
-- And communication is restored at `10:00:00`.
+- Given pending inventory updates exist and the system detects that communication with Earth has been restored at `10:00:00`.
 - When synchronization starts at `10:01:00`.
 - Then the synchronization timing requirement passes.
 - Expected result: Synchronization starts within 60 seconds.
 
 **AT-X05 — Extra: Check synchronization timing outside the limit**
 
-- Given pending inventory updates exist.
-- And communication is restored at `10:00:00`.
+- Given pending inventory updates exist and the system detects that communication with Earth has been restored at `10:00:00`.
 - When synchronization does not start until `10:01:01`.
 - Then the synchronization timing requirement fails.
 - Expected result: The 60-second requirement is not satisfied.
