@@ -7,7 +7,8 @@ from enum import Enum
 from typing import Callable, Mapping
 
 from ssir.domain_rules import (
-    Action, Forbidden, IdentityDirectory, LinkStatus, Role, User, require_permission,
+    RECENT_ACTIVITY_WINDOW, Action, Forbidden, IdentityDirectory, LinkStatus, Role, User,
+    earth_link_available, require_permission,
 )
 from ssir.earth.earth_store import EarthStore
 
@@ -119,5 +120,26 @@ class EarthGateway:
     def handle_station(self, credential: bytes, call: str, message: object) -> object:
         raise NotImplementedError
 
+    def dashboard(self, user: User, payload: Mapping[str, object]) -> Mapping[str, object]:
+        """Addition (Nov 16, 2026, not in contracts.md; Design question 3): the
+        DASHBOARD handler. Reads what Earth S1 needs in one transaction:
+        items, active alerts, missions, recent events (raw, 7-day window from
+        the Earth clock), and the pending count the station last reported."""
+        now = self._now()
+        with self._store.transaction() as tx:
+            return {
+                "now": now,
+                "items": tx.list_items(),
+                "alerts": tx.list_active_alerts(),
+                "missions": tx.list_missions(),
+                "events": tx.recent_events(now - RECENT_ACTIVITY_WINDOW),
+                "pending": tx.reported_pending_count(),
+            }
+
     def link_status(self) -> LinkStatus:
-        raise NotImplementedError
+        with self._store.transaction() as tx:
+            session_open = tx.session_open()
+            last_contact = tx.last_station_contact()
+            last_full_sync = tx.last_full_sync()
+        return LinkStatus(available=earth_link_available(session_open, last_contact, self._now()),
+                          last_full_sync=last_full_sync)
