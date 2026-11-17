@@ -572,35 +572,33 @@ No new route is required.
 
 ## 4. Design Questions
 
-The following questions are not fully answered by the current specification, architecture, or contracts. They should be resolved when the relevant slice is implemented. No additional public functions, modules, or API routes should be introduced without updating the contracts first.
+The following questions are uncertain from the current specification, architecture, contract documents. Additional public functions, modules, or API routes are therefore not introduced until they're clarified.
 
-1. **Authentication mechanism:** The contracts require an authentication verifier, but do not specify how an Authorization token maps to a user. A simple test authentication setup is needed before Slice 1 can be completed.
+1. **Authentication mechanism:** The contracts didn't specify how an Authorization token maps to a user.
 
-2. **Permission policy:** The exact mapping between the three user roles and protected operations is not defined. Tests currently assume explicitly configured permissions.
+2. **Permission policy:** Since the exact mapping matrix between user roles and protected operations is undefined, current tests uses explicitly configured permissions.
 
-3. **Persistent storage:** The architecture requires local persistent storage, but the database technology and initialization process are unspecified.
+3. **Persistent storage:** The database technology and initialization process for the required local persistent storage is undefined.
 
-4. **Atomic inventory updates:** The architecture says that the quantity, update history, audit record, and pending synchronization record should be saved together. The storage contracts expose separate save functions but do not explicitly define transaction behavior.
+4. **Atomic inventory updates:** The architecture says that the quantity, update history, audit record, and pending synchronization record should be saved together but the transaction behavior wasn't explicitly defined in contract.
 
-5. **Clock and ID injection:** The contracts mention an injected clock and ID generator, but do not define how they are supplied to the functions. This matters for fixed-time tests and unique update IDs.
+5. **Clock and ID injection:** The contracts didn't define how the injected clock and an ID generator, for fixed-time tests and unique update IDs, are supplied to the functions.
 
-6. **Quantity input types:** Fractional quantities and non-numeric values are not fully specified. AT-X14 should remain unresolved until this is clarified.
+6. **Quantity input types:** Fractional quantities and non-numeric values are not fully specified, leaving AT-X14 unresolved at this point.
 
-7. **Mission creation:** The system has no functional requirement or API for creating missions. Tests must use an existing seeded Draft mission.
+7. **Mission creation:** The system has no functional requirement or API for creating missions. Tests must thus use an existing Draft mission.
 
-8. **Mission lifecycle:** The main states are Draft, Submitted, Approved, Shipped, and Received. Other transitions, particularly cancellation, remain undefined.
+8. **Mission lifecycle:** The main states are Draft, Submitted, Approved, Shipped, and Received. Other transitions like cancellation are undefined.
 
 9. **Shipment damage and duplicate receipts:** The specification requires damage to be recorded and received quantities to be added once, but does not define how damaged quantities affect usable inventory or how duplicate receipt requests are recognized.
 
-10. **Earth-side integration:** The external service API, acknowledgement format, and authentication mechanism are not defined.
+10. **Earth-side integration:** External service API, acknowledgement format, and authentication mechanism are undefined.
 
-11. **Synchronization scheduling:** NFR3 requires synchronization to start within 60 seconds after communication recovery, but the contracts do not define an explicit connection-restored event or scheduling interface.
+11. **Synchronization scheduling:** Current contracts  didn't define an explicit connection-restored event or scheduling interface for NFR3, which states synchronization should start within 60 seconds after communication restored.
 
-12. **Last successful synchronization time:** The storage contract provides a getter but does not explicitly state which operation updates this timestamp. Clarify whether successful acknowledgement processing updates it.
+12. **Last successful synchronization time:** The contract didn't explicitly state which operation updates this timestamp. 
 
-13. **Encryption:** NFR4 requires encryption at rest and in transit, but the encryption technology and key-management method are unspecified.
-
-14. **Performance test environment:** The team must agree on the device and test conditions for the 10,000-record search performance requirement.
+13. **Encryption:** The encryption technology and key-management method for NFR4 are undefined.
 
 ## 5. Test Issues
 ### 5.1 Existing HTTP 501 tests
@@ -622,24 +620,15 @@ The affected existing tests are grouped below by their corresponding implementat
 `test_all_expected_api_operations_are_registered` should remain a route-registration regression test throughout implementation.
 
 ### 5.2 Acceptance-test and specification issues
-
-1. **AT01-02 and AT01-03:** The interaction-count requirement is a user-interface requirement. It cannot be verified by the REST API alone.
-
-2. **AT-X09:** The usability requirement needs a visual interface test. The current runnable application exposes REST routes and does not provide a separate browser-based dashboard.
-
-3. **AT16-03 control:** The current control points to AT02-01, which records usage through a different request from the quantity-update operation being rejected. It is not a same-request control. This should be clarified before treating the test as conclusive.
-
-4. **AT-X13:** Concurrent inventory updates have no specified expected behavior. Do not automate as a pass/fail test yet.
-
-5. **AT-X14:** Fractional and non-numeric quantity handling is undefined. Do not automate as a pass/fail test yet.
-
-6. **AT-X15:** Duplicate shipment receipt behavior is unclear. Do not automate as a pass/fail test until the expected behavior is defined.
-
-7. **AT-X16:** Error precedence when capacity is exceeded and measurements are missing simultaneously is undefined. Do not assert a specific error order.
-
-8. **AT-X08 and AT-X05:** These are negative controls for performance and timing limits. Their purpose is to demonstrate that an out-of-limit measurement fails the corresponding requirement, not to require the application to return a successful business response for an invalid condition.
-
-9. **AT-X06:** Encryption verification requires an agreed method and knowledge of the selected storage and communication mechanisms.
+1. **AT01-02 and AT01-03:** The interaction-count requirement requires the user-interface to verify.
+2. **AT-X09:** The usability requirement needs a visual interface test. The current runnable application exposes REST routes but doesn't provide a separate browser-based dashboard.
+3. **AT16-03 control:** The current control points to AT02-01, which records usage through a different request from the quantity-update operation being rejected, not a same-request control.
+4. **AT-X13:** The expected behavior for concurrent inventory updates are undefined.
+5. **AT-X14:** Fractional and non-numeric quantity handling is undefined.
+6. **AT-X15:** Duplicate shipment receipt behavior is unclear.
+7. **AT-X16:** Error precedence when capacity is exceeded and measurements are missing simultaneously is undefined. 
+8. **AT-X08 and AT-X05:** These are negative controls for performance and timing limits. They verifies if an out-of-limit measurement fails the corresponding requirement, and are not expecting a successful business response for an invalid condition.
+9. **AT-X06:** The method, storage and communication mechanisms for Encryption verification is undefined
 
 ## 6. Coverage
 
