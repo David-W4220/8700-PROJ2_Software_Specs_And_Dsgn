@@ -100,7 +100,8 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Skeleton to fill in:** `next_mission`.
 - **Depends on:** none.
 - **Done when:** the listed tests pass and no previously passing test fails.
-- **Status:** not started.
+- **Status:** done (Nov 16, 2026). All 3 tests pass; no regressions.
+- *Decisions taken (Nov 16, 2026):* a mission "last changed" at its latest status-history entry (answers Design question 6; manifest saves do not count). Ties, on arrival or on change time, go to the more advanced status (Shipped, Approved, Submitted), then the lowest mission number (R9 before R10). If any candidate has an expected arrival, only those are compared.
 - *Isolated because:* the status filter, the null-arrival fallback and the meaning of "changed" are easy to get subtly wrong (see Design question 6).
 
 ### Slice 6: Recent activity window
@@ -111,7 +112,8 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Skeleton to fill in:** `recent_activity`.
 - **Depends on:** none.
 - **Done when:** the listed tests pass and no previously passing test fails.
-- **Status:** not started.
+- **Status:** done (Nov 16, 2026). All 5 tests pass; no regressions.
+- *Decisions taken (Nov 16, 2026):* the 7-day edge is inclusive (answers G-B1 for FR-001); events later than "now" are kept; equal times keep the order the store gives, newest first otherwise.
 - *Isolated because:* the window edge and the limit are boundary rules. The exact-7-days case stays blocked on G-B1.
 
 ### Slice 7: Earth Store bootstrap and handshake
@@ -289,6 +291,7 @@ Based on `spec_ayden.md` (rev. Nov 2, 2026), `architecture_ayden.md`, `contracts
 - **Spec sources:** FR-028; NFR-002; architecture K8; Spec issue 3.
 - **Criteria:** AC-028. Extra row .3 ("Waiting for conflict review") lands in slice 39.
 - **Tests that should turn green:** none in the suite yet.
+- *Carry-over (Nov 16, 2026):* slice 6 made the FR-001 7-day edge inclusive; reuse the same edge for FR-028 unless you decide otherwise.
 - **Skeleton to fill in:** `rejected_still_listed`, `StationReadTx.pending_page`, `StationReadTx.rejected_since`, `StationScreens.sync`. Route: S7 on the station.
 - **Depends on:** 14, 15.
 - **Done when:** the listed tests pass and no previously passing test fails.
