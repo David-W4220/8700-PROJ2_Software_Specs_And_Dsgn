@@ -33,7 +33,9 @@ project/
 │
 └── tests/                       
     ├── __init__.py
-    └── test_contracts.py     
+    ├── test_contracts.py    
+    ├── test_inventory_lookup.py
+    └── test_inventory_quantity.py 
 ```
 ## Requirements
 
