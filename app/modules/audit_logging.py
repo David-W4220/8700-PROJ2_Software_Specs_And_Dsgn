@@ -1,14 +1,24 @@
-#Audit logging interfaces defines functions for recording and retrieving audit records.
+import uuid
+from app.modules import local_data_storage as storage
 
-from typing import Any
 
 def record_event(user_id: str, action: str, entity_type: str, entity_id: str,
-    previous_values: dict[str, Any] | None, new_values: dict[str, Any],
-    reviewer_id: str | None = None,   reason: str | None = None) -> dict[str, Any]:
-    #Create and return an audit record for an accepted operation
-    raise NotImplementedError
+    old_values: dict | None = None, new_values: dict | None = None,
+    details: dict | None = None,) -> dict:
+    #Create and save an audit event.
+    record = {
+        "audit_id": str(uuid.uuid4()),
+        "timestamp": storage.utc_timestamp(),
+        "user_id": user_id,
+        "action": action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "old_values": old_values or {},
+        "new_values": new_values or {},
+        "details": details or {},
+    }
+    return storage.save_audit_record(record)
 
-
-def list_records(entity_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    #Return audit records, optionally filtered by entity
-    raise NotImplementedError
+def list_records() -> list[dict]:
+    #Return stored audit records.
+    return storage.list_audit_records()
